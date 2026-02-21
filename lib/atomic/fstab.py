@@ -35,6 +35,7 @@ class FstabEntry:
     dump: str = "0"
     passno: str = "0"
     is_data: bool = False
+    _modified: bool = field(default=False, init=False, repr=False, compare=False)
 
     @classmethod
     def parse(cls, line: str) -> "FstabEntry":
@@ -89,6 +90,7 @@ class FstabEntry:
 
         if changed:
             self.options = ",".join(result)
+            self._modified = True
         return changed
 
     def format(self) -> str:
@@ -98,6 +100,8 @@ class FstabEntry:
         lines are returned unchanged.
         """
         if not self.is_data:
+            return self.raw
+        if not self._modified:
             return self.raw
         return (
             f"{self.device}\t{self.mountpoint}\t{self.fstype}"

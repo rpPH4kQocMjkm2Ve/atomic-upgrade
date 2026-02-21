@@ -75,6 +75,10 @@ validate_config() {
     get_root_device >/dev/null || return 1
     [[ "$KEEP_GENERATIONS" =~ ^[0-9]+$ ]] || { echo "ERROR: Invalid KEEP_GENERATIONS" >&2; return 1; }
     [[ "$KEEP_GENERATIONS" -ge 1 ]] || { echo "ERROR: KEEP_GENERATIONS must be >= 1" >&2; return 1; }
+    if [[ "$NEW_ROOT" == "$BTRFS_MOUNT" ]]; then
+        echo "ERROR: NEW_ROOT and BTRFS_MOUNT must be different paths" >&2
+        return 1
+    fi
     return 0
 }
 
@@ -82,9 +86,17 @@ validate_config() {
 
 check_dependencies() {
     local missing=()
-    for cmd in btrfs ukify sbctl cryptsetup findmnt arch-chroot python3; do
+    for cmd in btrfs ukify sbctl findmnt arch-chroot python3; do
         command -v "$cmd" >/dev/null || missing+=("$cmd")
     done
+
+    local root_type
+    root_type=$(python3 /usr/lib/atomic/rootdev.py detect 2>/dev/null | 
+        python3 -c "import sys,json; print(json.load(sys.stdin).get('type',''))" 2>/dev/null)
+    if [[ "$root_type" == *luks* ]]; then
+        command -v cryptsetup >/dev/null || missing+=("cryptsetup")
+    fi
+
     if [[ ${#missing[@]} -gt 0 ]]; then
         echo "ERROR: Missing commands: ${missing[*]}" >&2
         return 1
