@@ -12,7 +12,8 @@ install:
 	install -Dm644 hooks/00-block-direct-upgrade.hook \
 		$(DESTDIR)$(PREFIX)/share/libalpm/hooks/00-block-direct-upgrade.hook
 	install -Dm644 etc/atomic.conf $(DESTDIR)$(SYSCONFDIR)/atomic.conf
-	install -Dm755 extras/pacman-wrapper $(DESTDIR)/usr/local/bin/pacman
+	install -Dm755 extras/pacman-wrapper $(DESTDIR)$(PREFIX)/local/bin/pacman
+	install -Dm644 LICENSE $(DESTDIR)/usr/share/licenses/$(pkgname)/LICENSE
 
 uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/bin/atomic-upgrade
@@ -21,5 +22,6 @@ uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/bin/atomic-rebuild-uki
 	rm -rf $(DESTDIR)$(PREFIX)/lib/atomic/
 	rm -f $(DESTDIR)$(PREFIX)/share/libalpm/hooks/00-block-direct-upgrade.hook
-	rm -f $(DESTDIR)/usr/local/bin/pacman
+	rm -f $(DESTDIR)$(PREFIX)/local/bin/pacman
+	rm -rf $(DESTDIR)$(PREFIX)/share/licenses/$(pkgname)
 	@echo "Note: /etc/atomic.conf preserved. Remove manually if needed."
