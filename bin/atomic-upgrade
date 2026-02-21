@@ -188,12 +188,12 @@ mount -o subvol="/${NEW_SUBVOL}" "$ROOT_DEVICE" "$NEW_ROOT" || {
     exit 1
 }
 
-mount --bind "${ESP}" "${NEW_ROOT}/efi" || {
+mount --bind "${ESP}" "${NEW_ROOT}${ESP}" || {
     echo "ERROR: Failed to bind mount ESP" >&2
     exit 1
 }
 
-mount --bind "/var/cache" "${NEW_ROOT}/var/cache" || {
+mount --bind "/var/cache/pacman" "${NEW_ROOT}/var/cache/pacman" || {
     echo "ERROR: Failed to bind mount cache" >&2
     exit 1
 }
