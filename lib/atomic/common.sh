@@ -135,7 +135,7 @@ is_child_of_aur_helper() {
         case "$comm" in
             yay|paru|pikaur|aura) return 0 ;;
         esac
-        pid=$(awk '{print $4}' "/proc/$pid/stat" 2>/dev/null) || break
+        pid=$(awk '/^PPid:/{print $2}' "/proc/$pid/status" 2>/dev/null) || break
     done
     return 1
 }
