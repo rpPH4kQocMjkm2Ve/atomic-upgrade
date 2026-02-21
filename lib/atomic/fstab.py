@@ -20,7 +20,7 @@ import stat as stat_mod
 import sys
 import shutil
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass

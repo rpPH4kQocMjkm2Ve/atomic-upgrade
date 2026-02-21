@@ -365,7 +365,6 @@ garbage_collect() {
     [[ -z "$current_subvol" ]] && { echo "ERROR: Cannot determine current subvolume" >&2; return 1; }
 
     echo ":: Garbage collecting (keeping last ${keep} + current)..."
-    echo "   Current: ${current_subvol}"
 
     ensure_btrfs_mounted || return 1
 
