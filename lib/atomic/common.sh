@@ -71,7 +71,12 @@ load_config
 # ── Validation ──────────────────────────────────────────────────────
 
 validate_config() {
-    [[ -d "$ESP" ]] || { echo "ERROR: ESP not found: $ESP" >&2; return 1; }
+    if ! mountpoint -q "$ESP" 2>/dev/null; then
+        mount "$ESP" 2>/dev/null || {
+            echo "ERROR: ESP not mounted: $ESP" >&2
+            return 1
+        }
+    fi
     get_root_device >/dev/null || return 1
     [[ "$KEEP_GENERATIONS" =~ ^[0-9]+$ ]] || { echo "ERROR: Invalid KEEP_GENERATIONS" >&2; return 1; }
     [[ "$KEEP_GENERATIONS" -ge 1 ]] || { echo "ERROR: KEEP_GENERATIONS must be >= 1" >&2; return 1; }
