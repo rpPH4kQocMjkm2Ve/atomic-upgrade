@@ -226,8 +226,15 @@ echo ":: Verifying signature..."
 sbctl verify "$UKI_PATH" || { echo "ERROR: Signature verification failed" >&2; exit 1; }
 
 echo ":: Unmounting new root..."
-umount -R "$NEW_ROOT" 2>/dev/null || true
-# Mark as successful — cleanup won't delete the snapshot
+if ! umount -R "$NEW_ROOT" 2>/dev/null; then
+    echo ":: Retrying unmount..."
+    sleep 1
+    umount -Rl "$NEW_ROOT" 2>/dev/null
+fi
+if mountpoint -q "$NEW_ROOT" 2>/dev/null; then
+    echo "ERROR: Failed to unmount new root" >&2
+    exit 1
+fi
 SNAPSHOT_CREATED=0
 
 if [[ "$NO_GC" -eq 0 ]]; then
