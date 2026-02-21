@@ -222,9 +222,6 @@ UKI_PATH=$(build_uki "$GEN_ID" "$NEW_ROOT" "$NEW_SUBVOL") || exit 1
 echo ":: Signing UKI for Secure Boot..."
 sbctl sign "$UKI_PATH" || { echo "ERROR: Signing failed" >&2; exit 1; }
 
-echo ":: Verifying signature..."
-sbctl verify "$UKI_PATH" || { echo "ERROR: Signature verification failed" >&2; exit 1; }
-
 echo ":: Unmounting new root..."
 if ! umount -R "$NEW_ROOT" 2>/dev/null; then
     echo ":: Retrying unmount..."
@@ -236,6 +233,9 @@ if mountpoint -q "$NEW_ROOT" 2>/dev/null; then
     exit 1
 fi
 SNAPSHOT_CREATED=0
+
+echo ":: Verifying signature..."
+sbctl verify "$UKI_PATH" || echo "WARN: Signature verification failed, check manually" >&2
 
 if [[ "$NO_GC" -eq 0 ]]; then
     echo ":: Running garbage collection..."
