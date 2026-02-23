@@ -22,6 +22,27 @@ sudo atomic-upgrade
 
 Rollback: select a previous UKI entry in systemd-boot at boot time.
 
+## Comparison
+
+> **Scope note:** Snapper and Timeshift are snapshot tools, not upgrade managers.
+> The table compares common Arch ecosystem stacks that provide comparable
+> end-to-end functionality. NixOS and Fedora Atomic are entire OS models.
+
+| Feature | atomic-upgrade | Snapper + grub-btrfs | Timeshift + grub-btrfs | NixOS | Fedora Atomic |
+|---------|---------------|---------------------|------------------------|-------|---------------|
+| **Base distro** | Arch | Any (openSUSE native) | Any Btrfs | NixOS | Fedora |
+| **Atomic upgrades** | ✓ (chroot) | ✗ (pre/post snapshots) | ✗ (pre/post snapshots) | ✓ | ✓ |
+| **Rollback** | Boot menu (systemd-boot) | Boot menu (GRUB) | Boot menu (GRUB) | Boot menu | Boot menu (GRUB) |
+| **Secure Boot** | ✓ (sbctl) | Via separate setup | Via separate setup | ✓ (lanzaboote) | ✓ |
+| **UKI per generation** | ✓ | ✗ | ✗ | Optional | Optional |
+| **Upgrade isolation** | Chroot snapshot | None (live) | None (live) | Nix build | OSTree |
+| **Package manager** | pacman | Any (pacman, zypper…) | Any | nix | rpm-ostree |
+| **AUR** | ✓ (native) | ✓ (transparent) | ✓ (transparent) | ✗ | ✗ |
+| **LUKS handling** | Auto-detect + cmdline | N/A (not in scope) | N/A (not in scope) | Built-in | Built-in |
+| **GC** | ✓ (auto + manual) | ✓ (timeline/number) | ✓ (by count) | ✓ | ✓ |
+| **Codebase** | ~1500 LOC (bash+python) | Large (C++) | Large (Vala) | Entire OS | Entire OS |
+| **Learning curve** | Low (plain Arch) | Low | Low | High (Nix lang) | Medium (OSTree) |
+
 ## Installation
 
 ### AUR

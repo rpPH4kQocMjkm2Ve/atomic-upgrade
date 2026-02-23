@@ -307,6 +307,11 @@ list_generations() {
 build_uki() {
     local gen_id="$1" new_root="$2" new_subvol="$3"
     local uki_path="${ESP}/EFI/Linux/arch-${gen_id}.efi"
+
+    # os_release_tmp is cleaned up with rm -f at every exit point below,
+    # NOT via trap.  build_uki is a function, not a script — setting
+    # trap EXIT here would overwrite the caller's cleanup handler
+    # (snapshot removal, unmounts, lock release).
     local os_release_tmp=""
 
     local kernel="${new_root}/boot/vmlinuz-${KERNEL_PKG}"
@@ -343,12 +348,14 @@ build_uki() {
 
     [[ -f "${new_root}/etc/os-release" ]] || {
         echo "ERROR: No os-release in snapshot" >&2
+        rm -f "$os_release_tmp"
         return 1
     }
 
     sed "s|^PRETTY_NAME=.*|PRETTY_NAME=\"Arch Linux (${gen_id})\"|" \
         "${new_root}/etc/os-release" > "$os_release_tmp" || {
         echo "ERROR: Failed to create temp os-release" >&2
+        rm -f "$os_release_tmp"
         return 1
     }
 
