@@ -167,7 +167,8 @@ def build_cmdline(info: dict, new_subvol: str) -> str:
     if info.get("fstype"):
         parts.append(f"rootfstype={info['fstype']}")
 
-    parts.append(f"rootflags=subvol={new_subvol}")
+    prefix = "/" if info.get("subvol", "").startswith("/") else ""
+    parts.append(f"rootflags=subvol={prefix}{new_subvol}")
 
     return " ".join(parts)
 
