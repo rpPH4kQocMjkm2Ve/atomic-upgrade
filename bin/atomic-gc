@@ -50,8 +50,6 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-acquire_lock
-
 cleanup_gc() {
     set +e
     mountpoint -q "$BTRFS_MOUNT" 2>/dev/null && umount "$BTRFS_MOUNT"
@@ -73,6 +71,7 @@ case "$COMMAND" in
         done
         ;;
     rm)
+        acquire_lock
         [[ ${#ARGS[@]} -eq 0 ]] && { echo "ERROR: Specify generation(s) to delete" >&2; exit 1; }
         ensure_btrfs_mounted || exit 1
         # Validate all targets exist before deleting any
@@ -93,6 +92,7 @@ case "$COMMAND" in
         done
         ;;
     gc)
+        acquire_lock
         KEEP_COUNT="${ARGS[0]:-$KEEP_GENERATIONS}"
         if ! [[ "$KEEP_COUNT" =~ ^[0-9]+$ ]] || [[ "$KEEP_COUNT" -lt 1 ]]; then
             echo "ERROR: Invalid count: $KEEP_COUNT" >&2
