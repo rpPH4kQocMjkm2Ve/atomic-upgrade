@@ -71,6 +71,14 @@ class FstabEntry:
             return False
 
         opts = self.options.split(",")
+        # Warn about subvolid= which may conflict with subvol=
+        if any(o.startswith("subvolid=") for o in opts):
+            print(
+                "WARN: subvolid= found in fstab root entry, "
+                "may override subvol= on some kernels. "
+                "Consider removing subvolid= from fstab.",
+                file=sys.stderr,
+            )
         changed = False
         result = []
 
