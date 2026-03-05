@@ -166,6 +166,11 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
         /usr/bin/pacman -Syu --print 2>&1 | head -50
     fi
     echo ":: DRY RUN - would create UKI: ${ESP}/EFI/Linux/arch-${GEN_ID}.efi"
+    if [[ "$SBCTL_SIGN" -eq 1 ]]; then
+        echo ":: DRY RUN - would sign UKI with sbctl"
+    else
+        echo ":: DRY RUN - sbctl signing: disabled"
+    fi
     if [[ "$NO_GC" -eq 0 ]]; then
         echo ":: DRY RUN - would run garbage collection"
     else
@@ -219,8 +224,7 @@ fi
 echo ":: Building UKI..."
 UKI_PATH=$(build_uki "$GEN_ID" "$NEW_ROOT" "$NEW_SUBVOL") || exit 1
 
-echo ":: Signing UKI for Secure Boot..."
-sbctl sign "$UKI_PATH" || { echo "ERROR: Signing failed" >&2; exit 1; }
+sign_uki "$UKI_PATH" || { exit 1; }
 
 echo ":: Unmounting new root..."
 if ! umount -R "$NEW_ROOT" 2>/dev/null; then
@@ -234,8 +238,7 @@ if mountpoint -q "$NEW_ROOT" 2>/dev/null; then
 fi
 SNAPSHOT_CREATED=0
 
-echo ":: Verifying signature..."
-sbctl verify "$UKI_PATH" || echo "WARN: Signature verification failed, check manually" >&2
+verify_uki "$UKI_PATH"
 
 if [[ "$NO_GC" -eq 0 ]]; then
     echo ":: Running garbage collection..."

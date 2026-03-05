@@ -13,6 +13,7 @@ KEEP_GENERATIONS=3
 MAPPER_NAME="root_crypt"
 KERNEL_PKG="linux"
 LOCK_FILE="/var/lock/atomic-upgrade.lock"
+SBCTL_SIGN=0
 # Kernel security parameters
 KERNEL_PARAMS="rw slab_nomerge init_on_alloc=1 page_alloc.shuffle=1 pti=on vsyscall=none randomize_kstack_offset=on debugfs=off"
 
@@ -32,7 +33,7 @@ load_config() {
     fi
 
     # Whitelist of allowed config keys
-    local -a allowed=(BTRFS_MOUNT NEW_ROOT ESP KEEP_GENERATIONS MAPPER_NAME KERNEL_PARAMS KERNEL_PKG)
+    local -a allowed=(BTRFS_MOUNT NEW_ROOT ESP KEEP_GENERATIONS MAPPER_NAME KERNEL_PARAMS KERNEL_PKG SBCTL_SIGN)
 
     while IFS='=' read -r key value; do
         # Strip whitespace
@@ -95,9 +96,13 @@ validate_config() {
 
 check_dependencies() {
     local missing=()
-    for cmd in btrfs ukify sbctl findmnt arch-chroot python3; do
+    for cmd in btrfs ukify findmnt arch-chroot python3; do
         command -v "$cmd" >/dev/null || missing+=("$cmd")
     done
+
+    if [[ "$SBCTL_SIGN" -eq 1 ]]; then
+        command -v sbctl >/dev/null || missing+=("sbctl")
+    fi
 
     local root_type
     root_type=$(python3 /usr/lib/atomic/rootdev.py detect 2>/dev/null | 
@@ -147,6 +152,26 @@ is_child_of_aur_helper() {
         pid=$(awk '/^PPid:/{print $2}' "/proc/$pid/status" 2>/dev/null) || break
     done
     return 1
+}
+
+# ── Secure Boot signing helpers ──────────────────────────────────
+
+sign_uki() {
+    local uki_path="$1"
+    if [[ "$SBCTL_SIGN" -eq 1 ]]; then
+        echo ":: Signing UKI for Secure Boot..."
+        sbctl sign "$uki_path" || { echo "ERROR: Signing failed" >&2; return 1; }
+    else
+        echo ":: Skipping Secure Boot signing (SBCTL_SIGN=0)"
+    fi
+}
+
+verify_uki() {
+    local uki_path="$1"
+    if [[ "$SBCTL_SIGN" -eq 1 ]]; then
+        echo ":: Verifying signature..."
+        sbctl verify "$uki_path" || echo "WARN: Signature verification failed, check manually" >&2
+    fi
 }
 
 # ── fstab update (delegates to Python for safety) ──────────────────
@@ -501,4 +526,3 @@ delete_generation() {
         }
     fi
 }
-

@@ -128,8 +128,7 @@ mount -o subvol="/${SUBVOL}",ro "$ROOT_DEVICE" "$MOUNT_DIR" || {
 echo ":: Building UKI..."
 UKI_RESULT=$(build_uki "$GEN_ID" "$MOUNT_DIR" "$SUBVOL") || exit 1
 
-echo ":: Signing UKI for Secure Boot..."
-sbctl sign "$UKI_RESULT" || { echo "ERROR: Signing failed" >&2; exit 1; }
+sign_uki "$UKI_RESULT" || { exit 1; }
 
 echo ":: Unmounting..."
 umount "$MOUNT_DIR"
