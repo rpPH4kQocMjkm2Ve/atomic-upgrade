@@ -14,7 +14,7 @@ sudo atomic-upgrade
   3. Run command (default: pacman -Syu)
   4. Update fstab (subvol=)
   5. Build UKI (ukify)
-  6. Sign with sbctl (Secure Boot)
+  6. Sign with sbctl (if SBCTL\_SIGN=1)
   7. Garbage collect old generations
         ↓
   reboot → new generation active
@@ -33,7 +33,7 @@ Rollback: select a previous UKI entry in systemd-boot at boot time.
 | **Base distro** | Arch | Any (openSUSE native) | Any Btrfs | NixOS | Fedora |
 | **Atomic upgrades** | ✓ (chroot) | ✗ (pre/post snapshots) | ✗ (pre/post snapshots) | ✓ | ✓ |
 | **Rollback** | Boot menu (systemd-boot) | Boot menu (GRUB) | Boot menu (GRUB) | Boot menu | Boot menu (GRUB) |
-| **Secure Boot** | ✓ (sbctl) | Via separate setup | Via separate setup | ✓ (lanzaboote) | ✓ |
+| **Secure Boot** | ✓ (sbctl, optional) | Via separate setup | Via separate setup | ✓ (lanzaboote) | ✓ |
 | **UKI per generation** | ✓ | ✗ | ✗ | Optional | Optional |
 | **Upgrade isolation** | Chroot snapshot | None (live) | None (live) | Nix build | OSTree |
 | **Package manager** | pacman | Any (pacman, zypper…) | Any | nix | rpm-ostree |
@@ -145,10 +145,26 @@ Edit `/etc/atomic.conf`:
 | `MAPPER_NAME` | `root_crypt` | dm-crypt mapper name (fallback if auto-detection fails) |
 | `KERNEL_PKG` | `linux` | Kernel package (linux/linux-lts/linux-zen) |
 | `KERNEL_PARAMS` | *(security defaults)* | Kernel command line parameters |
+| `SBCTL_SIGN` | `0` | Sign UKI files with sbctl for Secure Boot (`0`=off, `1`=on) |
 
 Default `KERNEL_PARAMS`: `rw slab_nomerge init_on_alloc=1 page_alloc.shuffle=1 pti=on vsyscall=none randomize_kstack_offset=on debugfs=off`
 
 Root device is auto-detected (LUKS, LVM, LUKS+LVM, plain Btrfs). `MAPPER_NAME` is only used as a fallback if auto-detection fails.
+
+### Secure Boot signing
+
+UKI signing with `sbctl` is **disabled by default**. To enable:
+
+1. Set up Secure Boot with sbctl (enroll keys, etc.)
+2. Install `sbctl` if not already installed
+3. Enable in config:
+
+```bash
+# /etc/atomic.conf
+SBCTL_SIGN=1
+```
+
+When disabled, UKI files are built unsigned. They will boot on systems with Secure Boot disabled or in setup mode.
 
 ### Example: TPM2 auto-unlock
 
@@ -199,8 +215,8 @@ To disable: `sudo rm /usr/local/bin/pacman`
 
 - Btrfs root filesystem
 - systemd-boot
-- Secure Boot set up with sbctl (keys enrolled)
 - Root on a Btrfs subvolume (any name — snapshots are created as `root-<timestamp>`)
+- Secure Boot with sbctl *(optional, enable with `SBCTL_SIGN=1`)*
 
 > **Important:** `/home`, `/var/log`, `/var/cache`, and other stateful data
 > should live on **separate Btrfs subvolumes**. Only the root subvolume is
@@ -221,11 +237,11 @@ To disable: `sudo rm /usr/local/bin/pacman`
 Installed automatically via the AUR package:
 - `btrfs-progs`
 - `systemd-ukify`
-- `sbctl`
 - `python` ≥ 3.10
 - `arch-install-scripts` (provides `arch-chroot`)
 
 Optional:
+- `sbctl` — Secure Boot signing (enable with `SBCTL\_SIGN=1`)
 - `cryptsetup` — LUKS support
 - `lvm2` — LVM support
 - `bash-completion` — bash tab completions
