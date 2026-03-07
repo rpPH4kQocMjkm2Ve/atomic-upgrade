@@ -51,6 +51,11 @@ Rollback: select a previous UKI entry in systemd-boot at boot time.
 yay -S atomic-upgrade
 ```
 
+### gitpkg
+```bash
+gitpkg install atomic-upgrade
+```
+
 ### Manual
 
 ```bash
