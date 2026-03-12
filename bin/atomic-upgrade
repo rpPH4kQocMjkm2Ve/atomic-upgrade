@@ -163,7 +163,7 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
     echo ":: DRY RUN - chroot command: ${CHROOT_CMD[*]}"
     if [[ "${CHROOT_CMD[*]}" == "/usr/bin/pacman -Syu" ]]; then
         echo ":: DRY RUN - packages to upgrade:"
-        /usr/bin/pacman -Syu --print 2>&1 | head -50
+        /usr/bin/pacman -Syu --print 2>&1
     fi
     echo ":: DRY RUN - would create UKI: ${ESP}/EFI/Linux/arch-${GEN_ID}.efi"
     if [[ "$SBCTL_SIGN" -eq 1 ]]; then
