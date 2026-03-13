@@ -2,7 +2,7 @@
 # /usr/lib/atomic/common.sh
 #
 # Shared functions and configuration for the atomic-upgrade system.
-# Sourced by: atomic-upgrade, atomic-gc
+# Sourced by: atomic-upgrade, atomic-gc, atomic-rebuild-uki, atomic-guard
 
 # ── Defaults (overridable via /etc/atomic.conf) ─────────────────────
 
@@ -105,7 +105,7 @@ check_dependencies() {
     fi
 
     local root_type
-    root_type=$(python3 /usr/lib/atomic/rootdev.py detect 2>/dev/null | 
+    root_type=$(python3 /usr/lib/atomic/rootdev.py detect 2>/dev/null |
         python3 -c "import sys,json; print(json.load(sys.stdin).get('type',''))" 2>/dev/null)
     if [[ "$root_type" == *luks* ]]; then
         command -v cryptsetup >/dev/null || missing+=("cryptsetup")

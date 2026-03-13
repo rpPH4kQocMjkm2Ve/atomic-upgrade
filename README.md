@@ -240,6 +240,7 @@ To disable: `sudo rm /usr/local/bin/pacman`
 ### Dependencies
 
 Installed automatically via the AUR package:
+- [`verify-lib`](https://gitlab.com/fkzys/verify-lib) — validates shell libraries before sourcing (compiled C binary)
 - `btrfs-progs`
 - `systemd-ukify`
 - `python` ≥ 3.10
