@@ -8,6 +8,8 @@
 set -euo pipefail
 
 VERSION="0.0.17"
+readonly LIBDIR="/usr/lib/atomic"
+_src() { local p; p=$(verify-lib "$1" "$LIBDIR/") && source "$p" || exit 1; }
 
 show_help() {
     cat << EOF
@@ -46,7 +48,7 @@ esac
 [[ $EUID -eq 0 ]] || { echo "ERROR: Must run as root" >&2; exit 1; }
 
 export ATOMIC_UPGRADE=1
-source /usr/lib/atomic/common.sh
+_src "${LIBDIR}/common.sh"
 
 DRY_RUN=0
 CUSTOM_TAG=""

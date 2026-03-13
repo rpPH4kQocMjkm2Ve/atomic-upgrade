@@ -34,7 +34,8 @@ done
 
 if [[ $has_sync -eq 1 && $has_upgrade -eq 1 ]]; then
     # Load shared library only for -Syu path (not every pacman call)
-    source /usr/lib/atomic/common.sh 2>/dev/null || true
+    _p=$(verify-lib /usr/lib/atomic/common.sh /usr/lib/atomic/ 2>/dev/null) \
+        && source "$_p"
 
     if type -t is_child_of_aur_helper &>/dev/null && is_child_of_aur_helper; then
         exec /usr/bin/pacman "$@"

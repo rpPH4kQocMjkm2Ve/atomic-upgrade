@@ -7,9 +7,8 @@
 # Note: no "set -euo pipefail" here — the script relies on conditional
 # checks and process-tree walking that would break with errexit.
 
-if [[ -r /usr/lib/atomic/common.sh ]]; then
-    source /usr/lib/atomic/common.sh 2>/dev/null || true
-fi
+readonly LIBDIR="/usr/lib/atomic"
+_p=$(verify-lib "${LIBDIR}/common.sh" "$LIBDIR/" 2>/dev/null) && source "$_p"
 LOCK_FILE="${LOCK_FILE:-/var/lock/atomic-upgrade.lock}"
 
 # If called during atomic-upgrade: verify lock is actually held

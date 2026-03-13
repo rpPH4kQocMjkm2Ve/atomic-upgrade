@@ -6,7 +6,10 @@
 
 set -euo pipefail
 
-source /usr/lib/atomic/common.sh
+readonly LIBDIR="/usr/lib/atomic"
+_src() { local p; p=$(verify-lib "$1" "$LIBDIR/") && source "$p" || exit 1; }
+
+_src "${LIBDIR}/common.sh"
 
 show_help() {
     cat << 'EOF'
