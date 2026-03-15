@@ -40,11 +40,13 @@ Rollback: select a previous UKI entry in systemd-boot at boot time.
 | **UKI per generation** | ✓ | ✗ | ✗ | Optional | Optional |
 | **Upgrade isolation** | Chroot snapshot | None (live) | None (live) | Nix build | OSTree |
 | **Package manager** | pacman | Any (pacman, zypper…) | Any | nix | rpm-ostree |
-| **AUR** | ✓ (native) | ✓ (transparent) | ✓ (transparent) | ✗ | ✗ |
+| **AUR** | ✓ (native¹) | ✓ (transparent) | ✓ (transparent) | ✗ | ✗ |
 | **LUKS handling** | Auto-detect + cmdline | N/A (not in scope) | N/A (not in scope) | Built-in | Built-in |
 | **GC** | ✓ (auto + manual) | ✓ (timeline/number) | ✓ (by count) | ✓ | ✓ |
 | **Codebase** | ~1500 LOC (bash+python) | Large (C++) | Large (Vala) | Entire OS | Entire OS |
 | **Learning curve** | Low (plain Arch) | Low | Low | High (Nix lang) | Medium (OSTree) |
+
+> ¹ AUR helpers work inside the snapshot — see [AUR helpers](#aur-helpers).
 
 ## Installation
 
@@ -188,6 +190,40 @@ The system has two optional layers preventing accidental direct upgrades:
 - Package installs without `--sysupgrade` (`pacman -S`, `-R`, etc.)
 - Upgrades via `atomic-upgrade` (env var + lock verification)
 - Upgrades via AUR helpers (`yay`, `paru`, `pikaur`, `aura`)
+
+### AUR helpers
+
+AUR helpers (`yay`, `paru`, etc.) are allowed through the pacman hook guard
+but by default run on the **live system**, not atomically. A warning is shown
+when this happens.
+
+**Recommended: run AUR helper inside the snapshot**
+
+```bash
+sudo atomic-upgrade -- sudo -u YOUR_USER yay -Syu
+```
+
+This creates a snapshot, chroots into it, and runs `yay -Syu` as your regular
+user — updating both official and AUR packages atomically in a single generation.
+
+Replace `YOUR_USER` with your username and `yay` with your AUR helper of choice.
+
+**Installing a specific AUR package atomically:**
+
+```bash
+sudo atomic-upgrade -t my-pkg -- sudo -u YOUR_USER yay -S my-aur-package
+```
+
+**Multiple commands:**
+
+```bash
+sudo atomic-upgrade -- bash -c '/usr/bin/pacman -Syu && sudo -u YOUR_USER yay -S pkg1 pkg2'
+```
+
+> **Note:** If you run `yay -Syu` directly (outside `atomic-upgrade`), the
+> upgrade applies to the live system and is **not atomic**. The next
+> `atomic-upgrade` will snapshot whatever state the live system is in.
+```
 
 ### Pacman wrapper
 
