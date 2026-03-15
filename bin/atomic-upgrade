@@ -227,6 +227,7 @@ echo ":: Building UKI..."
 UKI_PATH=$(build_uki "$GEN_ID" "$NEW_ROOT" "$NEW_SUBVOL") || exit 1
 
 sign_uki "$UKI_PATH" || { exit 1; }
+SNAPSHOT_CREATED=0  # Upgrade committed — unmount failure must not trigger rollback
 
 echo ":: Unmounting new root..."
 if ! umount -R "$NEW_ROOT" 2>/dev/null; then
@@ -235,10 +236,8 @@ if ! umount -R "$NEW_ROOT" 2>/dev/null; then
     umount -Rl "$NEW_ROOT" 2>/dev/null
 fi
 if mountpoint -q "$NEW_ROOT" 2>/dev/null; then
-    echo "ERROR: Failed to unmount new root" >&2
-    exit 1
+    echo "WARN: Failed to unmount new root, will be cleaned on reboot" >&2
 fi
-SNAPSHOT_CREATED=0
 
 verify_uki "$UKI_PATH"
 
