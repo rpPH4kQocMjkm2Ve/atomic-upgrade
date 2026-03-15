@@ -170,12 +170,25 @@ def update_fstab(path_str: str, old_subvol: str, new_subvol: str) -> bool:
     # Atomic write: preserve original permissions
     tmp = path.with_suffix(".tmp")
     original_stat = path.stat()
-    tmp.write_text("".join(e.format() for e in entries))
+    content = "".join(e.format() for e in entries).encode()
+    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o644)
+    try:
+        os.write(fd, content)
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
     os.chown(tmp, original_stat.st_uid, original_stat.st_gid)
     os.chmod(tmp, stat_mod.S_IMODE(original_stat.st_mode))
 
     tmp.replace(path)
+
+    # Persist the rename in the directory
+    dir_fd = os.open(str(path.parent), os.O_RDONLY)
+    try:
+        os.fsync(dir_fd)
+    finally:
+        os.close(dir_fd)
 
     # Post-write verification
     new_norm = new_subvol.strip("/")
