@@ -43,7 +43,7 @@ load_config() {
         value="${value%"${value##*[![:space:]]}"}"
 
         # Strip inline comments
-        value="${value%%#*}"
+        value="${value%% #*}"
         value="${value%"${value##*[![:space:]]}"}"
 
         # Skip comments and blank lines
