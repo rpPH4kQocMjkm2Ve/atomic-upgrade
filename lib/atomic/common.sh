@@ -475,7 +475,8 @@ garbage_collect() {
         if [[ ! -f "${ESP}/EFI/Linux/arch-${gen}.efi" ]]; then
             echo "   Orphan: ${name} (no UKI)"
             if [[ "$dry_run" -eq 0 ]]; then
-                btrfs subvolume delete "$d" 2>/dev/null || true
+                btrfs subvolume delete "$d" 2>/dev/null ||
+                    echo "   WARN: Failed to delete orphan ${name}" >&2
             fi
         fi
     done
