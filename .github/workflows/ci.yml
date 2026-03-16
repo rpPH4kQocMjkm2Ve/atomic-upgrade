@@ -5,12 +5,14 @@ on:
     paths:
       - 'bin/**'
       - 'lib/**'
+      - 'extras/**'
       - 'tests/**'
       - '.github/workflows/ci.yml'
   pull_request:
     paths:
       - 'bin/**'
       - 'lib/**'
+      - 'extras/**'
       - 'tests/**'
       - '.github/workflows/ci.yml'
 
@@ -22,6 +24,7 @@ jobs:
     outputs:
       shell: ${{ steps.filter.outputs.shell }}
       python: ${{ steps.filter.outputs.python }}
+      integration: ${{ steps.filter.outputs.integration }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -33,6 +36,7 @@ jobs:
             shell:
               - 'bin/**'
               - 'lib/atomic/common.sh'
+              - 'extras/pacman-wrapper'
               - 'tests/test_common.sh'
               - '.github/workflows/ci.yml'
             python:
@@ -40,6 +44,13 @@ jobs:
               - 'lib/atomic/rootdev.py'
               - 'tests/test_fstab.py'
               - 'tests/test_rootdev.py'
+              - '.github/workflows/ci.yml'
+            integration:
+              - 'bin/atomic-guard'
+              - 'extras/pacman-wrapper'
+              - 'lib/atomic/common.sh'
+              - 'etc/atomic.conf'
+              - 'tests/test_integration.sh'
               - '.github/workflows/ci.yml'
 
   shellcheck:
@@ -53,7 +64,8 @@ jobs:
             bin/atomic-upgrade \
             bin/atomic-gc \
             bin/atomic-rebuild-uki \
-            lib/atomic/common.sh
+            lib/atomic/common.sh \
+            extras/pacman-wrapper
           shellcheck -s bash -e SC1090,SC1091,SC2310 \
             bin/atomic-guard
 
@@ -83,3 +95,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - run: bash tests/test_common.sh
+
+  integration-test:
+    needs: changes
+    if: needs.changes.outputs.integration == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: bash tests/test_integration.sh
