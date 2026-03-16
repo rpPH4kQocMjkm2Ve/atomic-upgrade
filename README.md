@@ -156,6 +156,7 @@ Edit `/etc/atomic.conf`:
 | `KERNEL_PKG` | `linux` | Kernel package (linux/linux-lts/linux-zen) |
 | `KERNEL_PARAMS` | *(security defaults)* | Kernel command line parameters |
 | `SBCTL_SIGN` | `0` | Sign UKI files with sbctl for Secure Boot (`0`=off, `1`=on) |
+| `UPGRADE_GUARD` | `1` | Upgrade guard: block direct `pacman -Syu` (`0`=off, `1`=on) |
 
 Default `KERNEL_PARAMS`: `rw slab_nomerge init_on_alloc=1 page_alloc.shuffle=1 pti=on vsyscall=none randomize_kstack_offset=on debugfs=off`
 
@@ -184,12 +185,25 @@ KERNEL_PARAMS="rd.luks.options=tpm2-device=auto rw slab_nomerge init_on_alloc=1 
 
 ## Guard layers
 
-The system has two optional layers preventing accidental direct upgrades:
+The system has two layers preventing accidental direct upgrades, controlled by a single `UPGRADE_GUARD` config flag (enabled by default):
 
-**Pacman hook** (`atomic-guard`) — blocks `pacman -Syu` at the hook level. Installed automatically. Allows:
+**Pacman hook** (`atomic-guard`) — blocks `pacman -Syu` at the transaction level. Allows:
 - Package installs without `--sysupgrade` (`pacman -S`, `-R`, etc.)
 - Upgrades via `atomic-upgrade` (env var + lock verification)
 - Upgrades via AUR helpers (`yay`, `paru`, `pikaur`, `aura`)
+
+**Pacman wrapper** (`/usr/local/bin/pacman`) — intercepts `pacman -Syu` and suggests `atomic-upgrade` instead. Detects AUR helpers to avoid double prompts. Also warns about `-Sy` without `-u` (partial upgrade risk).
+
+Both layers check `UPGRADE_GUARD` at runtime — the change takes effect immediately, no restart or file removal needed.
+
+### Disabling the guard
+
+```bash
+# /etc/atomic.conf
+UPGRADE_GUARD=0
+```
+
+This disables both the pacman hook and the wrapper in a single setting. Files remain on disk but are bypassed. To re-enable, set back to `1` (or remove the line — default is `1`).
 
 ### AUR helpers
 
@@ -223,14 +237,6 @@ sudo atomic-upgrade -- bash -c '/usr/bin/pacman -Syu && sudo -u YOUR_USER yay -S
 > **Note:** If you run `yay -Syu` directly (outside `atomic-upgrade`), the
 > upgrade applies to the live system and is **not atomic**. The next
 > `atomic-upgrade` will snapshot whatever state the live system is in.
-
-### Pacman wrapper
-
-A wrapper at `/usr/local/bin/pacman` intercepts `pacman -Syu` and suggests
-`atomic-upgrade` instead. It detects AUR helpers to avoid double prompts.
-Also warns about `-Sy` without `-u` (partial upgrade risk).
-
-To disable: `sudo rm /usr/local/bin/pacman`
 
 ## Garbage collection
 
