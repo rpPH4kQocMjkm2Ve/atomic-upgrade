@@ -46,7 +46,7 @@ section() { echo ""; echo "── $1 ──"; }
 # ── Setup ─────────────────────────────────────────────────────
 
 TESTDIR=$(mktemp -d)
-trap 'rm -rf "$TESTDIR"; kill 0 2>/dev/null' EXIT
+trap 'rm -rf "$TESTDIR"' EXIT
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -227,7 +227,8 @@ run_cmd env ATOMIC_UPGRADE=1 CONFIG_FILE="${CONF_DIR}/guard_on.conf" \
     LOCK_FILE="$TEST_LOCK" bash "$GUARD"
 assert_eq "ATOMIC_UPGRADE + lock held → exit 0" "0" "$_rc"
 
-kill $LOCK_PID 2>/dev/null; wait $LOCK_PID 2>/dev/null
+kill $LOCK_PID 2>/dev/null
+wait $LOCK_PID 2>/dev/null || true
 
 
 section "guard: ATOMIC_UPGRADE + lock file missing → fail"

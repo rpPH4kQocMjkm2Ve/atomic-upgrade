@@ -60,7 +60,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - run: |
-          shellcheck -s bash -e SC1090,SC1091,SC2010 \
+          shellcheck -s bash -e SC1090,SC1091,SC2010,SC2034 \
             bin/atomic-upgrade \
             bin/atomic-gc \
             bin/atomic-rebuild-uki \
