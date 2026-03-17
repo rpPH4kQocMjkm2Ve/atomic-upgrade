@@ -224,3 +224,46 @@ class TestUpdateFstab:
         assert "root-20250220-141710" not in text
         assert "ABCD-1234" in text
         assert "tmpfs" in text
+
+    # ── subvolid= detection (diff: fstab.py error diagnostics) ──
+
+    def test_subvolid_without_subvol_returns_false(self, tmp_path):
+        """Root entry uses subvolid= but no subvol= → update fails."""
+        path = tmp_path / "fstab"
+        path.write_text(
+            "UUID=x / btrfs rw,noatime,subvolid=256 0 0\n"
+        )
+        assert not update_fstab(str(path), "root-old", "root-new")
+
+    def test_subvolid_without_subvol_error_message(self, tmp_path, capsys):
+        """Error message specifically mentions subvolid= problem."""
+        path = tmp_path / "fstab"
+        path.write_text(
+            "UUID=x / btrfs rw,noatime,subvolid=256 0 0\n"
+        )
+        update_fstab(str(path), "root-old", "root-new")
+        err = capsys.readouterr().err
+        assert "subvolid=" in err
+        assert "subvol=" in err
+
+    def test_subvolid_with_subvol_works(self, tmp_path):
+        """Both subvolid= and subvol= present → normal replacement succeeds."""
+        path = tmp_path / "fstab"
+        path.write_text(
+            "UUID=x / btrfs rw,subvolid=256,subvol=/root-old 0 0\n"
+        )
+        assert update_fstab(str(path), "root-old", "root-new")
+        text = path.read_text()
+        assert "root-new" in text
+
+    def test_subvol_mismatch_without_subvolid_generic_error(self, tmp_path, capsys):
+        """Root has subvol= but wrong name, no subvolid= → generic error."""
+        path = tmp_path / "fstab"
+        path.write_text(
+            "UUID=x / btrfs rw,subvol=/root-other 0 0\n"
+        )
+        update_fstab(str(path), "root-old", "root-new")
+        err = capsys.readouterr().err
+        assert "subvol=root-old not found" in err
+        # Must NOT mention subvolid since there is none
+        assert "subvolid=" not in err
