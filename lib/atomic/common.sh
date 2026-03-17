@@ -472,32 +472,36 @@ garbage_collect() {
         fi
     fi
 
-    for d in "${BTRFS_MOUNT}"/root-*; do
-        [[ -d "$d" ]] || continue
-        local name="${d##*/}"
-        local gen="${name#root-}"
-        [[ "$name" == "$current_subvol" ]] && continue
-        [[ "$gen" =~ ^[0-9]{8}-[0-9]{6} ]] || continue
-        if [[ ! -f "${ESP}/EFI/Linux/arch-${gen}.efi" ]]; then
-            echo "   Orphan: ${name} (no UKI)"
-            if [[ "$dry_run" -eq 0 ]]; then
-                btrfs subvolume delete "$d" 2>/dev/null ||
-                    echo "   WARN: Failed to delete orphan ${name}" >&2
+    if ! mountpoint -q "$ESP" 2>/dev/null; then
+        echo "   WARN: ESP not mounted, skipping orphan sweep" >&2
+    else
+        for d in "${BTRFS_MOUNT}"/root-*; do
+            [[ -d "$d" ]] || continue
+            local name="${d##*/}"
+            local gen="${name#root-}"
+            [[ "$name" == "$current_subvol" ]] && continue
+            [[ "$gen" =~ ^[0-9]{8}-[0-9]{6} ]] || continue
+            if [[ ! -f "${ESP}/EFI/Linux/arch-${gen}.efi" ]]; then
+                echo "   Orphan: ${name} (no UKI)"
+                if [[ "$dry_run" -eq 0 ]]; then
+                    btrfs subvolume delete "$d" 2>/dev/null ||
+                        echo "   WARN: Failed to delete orphan ${name}" >&2
+                fi
             fi
-        fi
-    done
+        done
 
-    for uki in "${ESP}/EFI/Linux/arch-"*.efi; do
-        [[ -e "$uki" ]] || continue
-        local uki_name="${uki##*/}"
-        uki_name="${uki_name#arch-}"; uki_name="${uki_name%.efi}"
-        [[ "root-${uki_name}" == "$current_subvol" ]] && continue
-        [[ "$uki_name" =~ ^[0-9]{8}-[0-9]{6} ]] || continue
-        if [[ ! -d "${BTRFS_MOUNT}/root-${uki_name}" ]]; then
-            echo "   Orphan UKI: ${uki_name} (no subvolume)"
-            [[ "$dry_run" -eq 0 ]] && rm -f "$uki"
-        fi
-    done
+        for uki in "${ESP}/EFI/Linux/arch-"*.efi; do
+            [[ -e "$uki" ]] || continue
+            local uki_name="${uki##*/}"
+            uki_name="${uki_name#arch-}"; uki_name="${uki_name%.efi}"
+            [[ "root-${uki_name}" == "$current_subvol" ]] && continue
+            [[ "$uki_name" =~ ^[0-9]{8}-[0-9]{6} ]] || continue
+            if [[ ! -d "${BTRFS_MOUNT}/root-${uki_name}" ]]; then
+                echo "   Orphan UKI: ${uki_name} (no subvolume)"
+                [[ "$dry_run" -eq 0 ]] && rm -f "$uki"
+            fi
+        done
+    fi
 
     echo ":: Garbage collection done"
 }
