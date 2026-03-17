@@ -188,6 +188,8 @@ run_cmd env CONFIG_FILE="${CONF_DIR}/guard_on.conf" LOCK_FILE="$TEST_LOCK" \
     bash "$GUARD"
 assert_eq "guard enabled → exit 1" "1" "$_rc"
 assert_contains "block message mentions atomic-upgrade" "atomic-upgrade" "$_out"
+# Verify diagnostic message when pacman not in process tree
+assert_contains "shows process tree diagnostic" "pacman not found in process tree" "$_out"
 
 
 section "guard: default config → guard active"
