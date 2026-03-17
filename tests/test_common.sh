@@ -701,6 +701,51 @@ make_mock btrfs 'exit 0'
 make_mock df    'echo -e "Avail\n512000"'
 
 
+# ── check_btrfs_space: absolute minimum threshold ───────────
+
+section "check_btrfs_space absolute minimum"
+
+# Low percentage (3%) but plenty of absolute space (50GB) → pass with warning.
+# Total ~1.6TB, free ~50GB: well above the 2GB absolute minimum.
+make_mock btrfs '
+if echo "$*" | grep -q "usage"; then
+    echo "    Device size:              1717986918400"
+    echo "    Free (estimated):           53687091200"
+fi
+'
+run_cmd check_btrfs_space "${TESTDIR}" 10
+assert_eq "low % above abs min → rc 0" "0" "$_rc"
+assert_contains "shows below-threshold note" "below" "$_out"
+assert_contains "mentions absolute minimum" "minimum" "$_out"
+
+# Low percentage (1%) AND low absolute space (0GB / ~100MB) → fail.
+# Both thresholds crossed: percentage below 10% AND absolute below 2GB.
+make_mock btrfs '
+if echo "$*" | grep -q "usage"; then
+    echo "    Device size:                 10737418240"
+    echo "    Free (estimated):              107374182"
+fi
+'
+run_cmd check_btrfs_space "${TESTDIR}" 10
+assert_eq "low % and low abs → rc 1" "1" "$_rc"
+assert_contains "error mentions both thresholds" "or" "$_out"
+
+# High percentage (50%) → normal message, no "below" warning
+make_mock btrfs '
+if echo "$*" | grep -q "usage"; then
+    echo "    Device size:                 107374182400"
+    echo "    Free (estimated):             53687091200"
+fi
+'
+run_cmd check_btrfs_space "${TESTDIR}" 10
+assert_eq "high % → rc 0" "0" "$_rc"
+assert_not_contains "no below warning for high %" "below" "$_out"
+
+# Restore
+make_mock btrfs 'exit 0'
+make_mock df    'echo -e "Avail\n512000"'
+
+
 # ── Config whitelist security ────────────────────────────────
 
 section "Config security"
