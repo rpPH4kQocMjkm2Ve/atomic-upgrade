@@ -916,6 +916,49 @@ assert_contains "error about current subvol" "Cannot determine" "$_out"
 make_mock findmnt 'echo "rw,subvol=/root-20250605-120000"'
 
 
+# ── garbage_collect: ESP not mounted → skip orphan sweep ─────
+
+section "garbage_collect: ESP not mounted"
+
+ESP="${TESTDIR}/esp_no_mount"
+BTRFS_MOUNT="${TESTDIR}/btrfs_no_mount"
+mkdir -p "${ESP}/EFI/Linux" "$BTRFS_MOUNT"
+
+make_mock findmnt 'echo "rw,subvol=/root-20250605-120000"'
+_ROOT_DEVICE="${TESTDIR}/fake_dev/root_crypt"
+make_mock btrfs 'exit 0'
+
+# Current generation
+touch "${ESP}/EFI/Linux/arch-20250605-120000.efi"
+mkdir -p "${BTRFS_MOUNT}/root-20250605-120000"
+
+# One non-current generation (within keep limit)
+touch "${ESP}/EFI/Linux/arch-20250604-100000.efi"
+mkdir -p "${BTRFS_MOUNT}/root-20250604-100000"
+
+# Orphan subvol — would be detected if ESP were mounted
+mkdir -p "${BTRFS_MOUNT}/root-20250510-999999"
+
+# mountpoint: succeed for everything except ESP
+make_mock mountpoint '
+for a in "$@"; do
+    [[ "$a" == "'"${ESP}"'" ]] && exit 1
+done
+exit 0
+'
+
+run_cmd garbage_collect 3 0
+assert_eq "ESP not mounted → gc still succeeds" "0" "$_rc"
+assert_contains "warns about ESP not mounted" "ESP not mounted" "$_out"
+assert_contains "mentions skipping orphan sweep" "skipping orphan sweep" "$_out"
+assert_not_contains "no orphan detected when ESP unmounted" "Orphan:" "$_out"
+assert_not_contains "no orphan UKI when ESP unmounted" "Orphan UKI" "$_out"
+assert_contains "gc still completes" "done" "$_out"
+
+# Restore mountpoint mock
+make_mock mountpoint 'exit 0'
+
+
 # ── is_child_of_aur_helper ──────────────────────────────────
 
 section "is_child_of_aur_helper"
