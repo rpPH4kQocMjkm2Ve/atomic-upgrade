@@ -155,10 +155,22 @@ def update_fstab(path_str: str, old_subvol: str, new_subvol: str) -> bool:
             updated += 1
 
     if updated == 0:
-        print(
-            f"ERROR: Root entry exists but subvol={old_subvol} not found",
-            file=sys.stderr,
+        has_subvolid = any(
+            e.is_data and e.mountpoint == "/"
+            and any(o.startswith("subvolid=") for o in e.options.split(","))
+            for e in entries
         )
+        if has_subvolid:
+            print(
+                f"ERROR: Root entry uses subvolid= without subvol=. "
+                f"Add 'subvol={old_subvol}' to fstab mount options.",
+                file=sys.stderr,
+            )
+        else:
+            print(
+                f"ERROR: Root entry exists but subvol={old_subvol} not found",
+                file=sys.stderr,
+            )
         return False
 
     if updated > 1:
