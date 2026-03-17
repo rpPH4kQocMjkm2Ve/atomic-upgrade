@@ -49,6 +49,7 @@ is_sysupgrade() {
         pid=$(awk '/^PPid:/{print $2}' "/proc/$pid/status" 2>/dev/null) || break
     done
     # Cannot find pacman in process tree — block for safety
+    echo "atomic-guard: pacman not found in process tree, blocking" >&2
     return 0
 }
 
