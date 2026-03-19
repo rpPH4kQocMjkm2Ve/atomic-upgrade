@@ -7,7 +7,7 @@
 
 set -euo pipefail
 
-VERSION="0.1.0"
+VERSION="0.1.1"
 readonly LIBDIR="/usr/lib/atomic"
 _src() { local p; p=$(verify-lib "$1" "$LIBDIR/") && source "$p" || exit 1; }
 
@@ -22,6 +22,8 @@ Options:
     -t, --tag TAG    Custom tag for the snapshot (appended to timestamp)
     --no-gc          Skip garbage collection after upgrade
     --ephemeral      Create a one-shot generation (auto-cleaned on next GC)
+    --no-home        Don't create isolated home for ephemeral (share host home)
+    --copy-files "F1 F2"  Copy these files into ephemeral home
     -h, --help       Show this help
     -V, --version    Show version
 
@@ -35,6 +37,8 @@ Examples:
     atomic-upgrade --no-gc                          # Upgrade without garbage collection
     atomic-upgrade -- pacman -S nvidia              # Install specific package
     atomic-upgrade --ephemeral -- pacman -S nvidia  # One-shot: test nvidia, auto-cleanup
+    atomic-upgrade --ephemeral --no-home -- pacman -S nvidia  # Ephemeral, shared home
+    atomic-upgrade --ephemeral --copy-files ".bashrc .ssh" -- pacman -S nvidia
     atomic-upgrade -t nvidia -- pacman -S nvidia-dkms
     atomic-upgrade --no-gc -t cleanup -- pacman -Rns firefox
 
@@ -56,6 +60,8 @@ DRY_RUN=0
 CUSTOM_TAG=""
 NO_GC=0
 EPHEMERAL=0
+EPHEMERAL_NO_HOME=0
+EPHEMERAL_COPY_FILES=""
 CHROOT_CMD=()
 
 while [[ $# -gt 0 ]]; do
@@ -68,11 +74,28 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-gc) NO_GC=1; shift ;;
         --ephemeral) EPHEMERAL=1; shift ;;
+        --no-home) EPHEMERAL_NO_HOME=1; shift ;;
+        --copy-files)
+            [[ -n "${2:-}" ]] || { echo "ERROR: --copy-files requires an argument" >&2; exit 1; }
+            EPHEMERAL_COPY_FILES="$2"; shift 2
+            ;;
         --) shift; CHROOT_CMD=("$@"); break ;;
         -*) echo "ERROR: Unknown option: $1" >&2; exit 1 ;;
         *) echo "ERROR: Unexpected argument: $1. Use -- before commands." >&2; exit 1 ;;
     esac
 done
+
+# --no-home and --copy-files only make sense with --ephemeral
+if [[ $EPHEMERAL -eq 0 ]]; then
+    if [[ $EPHEMERAL_NO_HOME -eq 1 ]]; then
+        echo "ERROR: --no-home requires --ephemeral" >&2
+        exit 1
+    fi
+    if [[ -n "$EPHEMERAL_COPY_FILES" ]]; then
+        echo "ERROR: --copy-files requires --ephemeral" >&2
+        exit 1
+    fi
+fi
 
 # Validate custom tag
 if [[ -n "$CUSTOM_TAG" ]]; then
@@ -149,7 +172,13 @@ trap cleanup EXIT
 
 echo ":: Current: ${CURRENT_SUBVOL_RAW} → New: /${NEW_SUBVOL}"
 echo ":: Command: ${CHROOT_CMD[*]}"
-[[ $EPHEMERAL -eq 1 ]] && echo ":: Mode: ephemeral (one-shot)"
+if [[ $EPHEMERAL -eq 1 ]]; then
+    if [[ $EPHEMERAL_NO_HOME -eq 1 ]]; then
+        echo ":: Mode: ephemeral (one-shot, shared home)"
+    else
+        echo ":: Mode: ephemeral (one-shot, isolated home)"
+    fi
+fi
 
 mkdir -p "$NEW_ROOT"
 ensure_btrfs_mounted
@@ -170,7 +199,13 @@ check_esp_space 250 || exit 1
 
 if [[ "$DRY_RUN" -eq 1 ]]; then
     echo ":: DRY RUN - would create snapshot: ${NEW_SUBVOL}"
-    [[ $EPHEMERAL -eq 1 ]] && echo ":: DRY RUN - would mark as ephemeral with isolated home"
+    if [[ $EPHEMERAL -eq 1 ]]; then
+        if [[ $EPHEMERAL_NO_HOME -eq 1 ]]; then
+            echo ":: DRY RUN - would mark as ephemeral (shared home)"
+        else
+            echo ":: DRY RUN - would mark as ephemeral with isolated home"
+        fi
+    fi
     echo ":: DRY RUN - chroot command: ${CHROOT_CMD[*]}"
     if [[ "${CHROOT_CMD[*]}" == "/usr/bin/pacman -Syu" ]]; then
         echo ":: DRY RUN - packages to upgrade:"
@@ -196,28 +231,21 @@ btrfs subvolume snapshot "${BTRFS_MOUNT}/${CURRENT_SUBVOL}" \
     "${BTRFS_MOUNT}/${NEW_SUBVOL}"
 SNAPSHOT_CREATED=1
 
-# Ephemeral: create marker and isolated home
+# Ephemeral: create marker and optionally isolated home
 if [[ $EPHEMERAL -eq 1 ]]; then
     echo ":: Setting up ephemeral generation..."
     touch "${BTRFS_MOUNT}/${NEW_SUBVOL}/.atomic-ephemeral"
 
-    EPHEMERAL_HOME="ephemeral-home-${GEN_ID}"
-    btrfs subvolume create "${BTRFS_MOUNT}/${EPHEMERAL_HOME}" || {
-        echo "ERROR: Failed to create ephemeral home subvolume" >&2
-        exit 1
-    }
-    EPHEMERAL_HOME_CREATED=1
+    if [[ $EPHEMERAL_NO_HOME -eq 0 ]]; then
+        EPHEMERAL_HOME="ephemeral-home-${GEN_ID}"
+        btrfs subvolume create "${BTRFS_MOUNT}/${EPHEMERAL_HOME}" || {
+            echo "ERROR: Failed to create ephemeral home subvolume" >&2
+            exit 1
+        }
+        EPHEMERAL_HOME_CREATED=1
 
-    # Copy home skeleton
-    if [[ -d "/home" ]]; then
-        for user_dir in /home/*/; do
-            [[ -d "$user_dir" ]] || continue
-            username=$(basename "$user_dir")
-            target="${BTRFS_MOUNT}/${EPHEMERAL_HOME}/${username}"
-            mkdir -p "$target"
-            chown --reference="$user_dir" "$target" 2>/dev/null || true
-            chmod --reference="$user_dir" "$target" 2>/dev/null || true
-        done
+        # Populate home skeleton with optional file copying
+        populate_home_skeleton "${BTRFS_MOUNT}/${EPHEMERAL_HOME}" "$EPHEMERAL_COPY_FILES"
     fi
 fi
 
@@ -257,8 +285,8 @@ if ! grep -Eq "subvol=/?${NEW_SUBVOL}" "${NEW_ROOT}/etc/fstab"; then
     exit 1
 fi
 
-# Ephemeral: update /home in fstab
-if [[ $EPHEMERAL -eq 1 ]]; then
+# Ephemeral: update /home in fstab (only if home was created)
+if [[ $EPHEMERAL -eq 1 && $EPHEMERAL_NO_HOME -eq 0 ]]; then
     echo ":: Updating fstab (ephemeral home)..."
     update_fstab_home "${NEW_ROOT}/etc/fstab" "${EPHEMERAL_HOME}" || {
         echo "WARN: Could not update /home in fstab. Ephemeral gen will share host /home." >&2

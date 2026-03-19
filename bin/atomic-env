@@ -6,7 +6,7 @@
 
 set -euo pipefail
 
-VERSION="0.0.1"
+VERSION="0.0.2"
 readonly LIBDIR="/usr/lib/atomic"
 _src() { local p; p=$(verify-lib "$1" "$LIBDIR/") && source "$p" || exit 1; }
 
@@ -19,15 +19,21 @@ show_help() {
 atomic-env - Named environment management
 
 Usage:
-    atomic-env create NAME [-- COMMAND...]   Create environment from current root
-    atomic-env update NAME [-- COMMAND...]   Update existing environment
-    atomic-env delete [-y] NAME              Delete environment
-    atomic-env boot [--default NAME|--reset] Set boot target
-    atomic-env list                          List environments
+    atomic-env create NAME [OPTIONS] [-- COMMAND...]   Create environment from current root
+    atomic-env update NAME [-- COMMAND...]             Update existing environment
+    atomic-env delete [-y] NAME                        Delete environment
+    atomic-env boot [--default NAME|--reset]           Set boot target
+    atomic-env list                                    List environments
+
+Create/Update Options:
+    --no-home              Don't create a separate /home subvolume
+    --copy-files "F1 F2"   Copy these files from current /home into env home
+                           (relative paths from user home, e.g. ".bashrc .config/fish")
 
 Examples:
     atomic-env create kde -- pacman -S plasma-meta
-    atomic-env create minimal
+    atomic-env create minimal --no-home
+    atomic-env create dev --copy-files ".bashrc .ssh .gitconfig" -- pacman -S base-devel
     atomic-env update kde -- pacman -Syu
     atomic-env delete kde
     atomic-env boot --default kde
@@ -35,7 +41,8 @@ Examples:
     atomic-env list
 
 Environment names must be alphanumeric (with hyphens/underscores), max 48 chars.
-Each environment gets its own /home subvolume for isolation.
+Each environment gets its own /home subvolume for isolation (unless --no-home).
+Files to copy into new homes can also be set via HOME_COPY_FILES in /etc/atomic.conf.
 EOF
     exit 0
 }
@@ -123,10 +130,18 @@ do_create() {
     validate_config || exit 1
     check_dependencies || exit 1
 
+    local no_home=0
+    local copy_files=""
     local chroot_cmd=()
-    # Parse remaining args: everything after -- is the chroot command
+
+    # Parse remaining args
     while [[ $# -gt 0 ]]; do
         case "$1" in
+            --no-home) no_home=1; shift ;;
+            --copy-files)
+                [[ -n "${2:-}" ]] || { echo "ERROR: --copy-files requires an argument" >&2; exit 1; }
+                copy_files="$2"; shift 2
+                ;;
             --) shift; chroot_cmd=("$@"); break ;;
             *) echo "ERROR: Unexpected argument: $1. Use -- before commands." >&2; exit 1 ;;
         esac
@@ -156,6 +171,7 @@ do_create() {
     [[ -n "$current_subvol" ]] || { echo "ERROR: Cannot detect current subvolume" >&2; exit 1; }
 
     echo ":: Creating environment '${name}' from ${current_subvol}..."
+    [[ $no_home -eq 1 ]] && echo ":: Mode: shared home (--no-home)"
 
     # Check space
     check_btrfs_space "$BTRFS_MOUNT" 10 || exit 1
@@ -170,29 +186,17 @@ do_create() {
     }
     ENV_CREATED=1
 
-    # Step 2: create isolated home subvolume
-    echo ":: Creating home subvolume..."
-    btrfs subvolume create "${BTRFS_MOUNT}/${hv}" || {
-        echo "ERROR: Failed to create home subvolume" >&2
-        exit 1
-    }
-    ENV_HOME_CREATED=1
+    # Step 2: create isolated home subvolume (unless --no-home)
+    if [[ $no_home -eq 0 ]]; then
+        echo ":: Creating home subvolume..."
+        btrfs subvolume create "${BTRFS_MOUNT}/${hv}" || {
+            echo "ERROR: Failed to create home subvolume" >&2
+            exit 1
+        }
+        ENV_HOME_CREATED=1
 
-    # Copy skeleton from current /home if it exists and home subvol is empty
-    if [[ -d "/home" ]]; then
-        # Copy top-level directory structure (not full content — just dirs + permissions)
-        local user_dir
-        for user_dir in /home/*/; do
-            [[ -d "$user_dir" ]] || continue
-            local username
-            username=$(basename "$user_dir")
-            local target="${BTRFS_MOUNT}/${hv}/${username}"
-            mkdir -p "$target"
-            # Preserve ownership
-            chown --reference="$user_dir" "$target" 2>/dev/null || true
-            chmod --reference="$user_dir" "$target" 2>/dev/null || true
-        done
-        echo "   Home skeleton created from current /home"
+        # Populate home skeleton with optional file copying
+        populate_home_skeleton "${BTRFS_MOUNT}/${hv}" "$copy_files"
     fi
 
     # Step 3: mount and configure
@@ -229,11 +233,13 @@ do_create() {
         exit 1
     }
 
-    # Step 5: update fstab — home subvolume
-    echo ":: Updating fstab (home)..."
-    update_fstab_home "${mount_dir}/etc/fstab" "$hv" || {
-        echo "WARN: Could not update /home in fstab. Environment will share host /home." >&2
-    }
+    # Step 5: update fstab — home subvolume (only if home was created)
+    if [[ $no_home -eq 0 ]]; then
+        echo ":: Updating fstab (home)..."
+        update_fstab_home "${mount_dir}/etc/fstab" "$hv" || {
+            echo "WARN: Could not update /home in fstab. Environment will share host /home." >&2
+        }
+    fi
 
     # Step 6: run chroot command if provided
     if [[ ${#chroot_cmd[@]} -gt 0 ]]; then
@@ -261,6 +267,11 @@ do_create() {
     CLEANUP_ENV_NAME=""
 
     echo "Environment '${name}' created."
+    if [[ $no_home -eq 1 ]]; then
+        echo "Home: shared with host (--no-home)"
+    else
+        echo "Home: isolated (${hv})"
+    fi
     echo "Boot with: atomic-env boot --default ${name}"
 }
 
@@ -440,11 +451,14 @@ do_delete() {
     fi
 
     # Reset boot default if this env was the default
-    local current_default
-    current_default=$(bootctl list 2>/dev/null | grep -oP '(?<=→ ).*' | head -1) || true
-    if [[ "$current_default" == *"env-${name}"* ]]; then
-        echo "   Resetting boot default (was set to this environment)"
-        bootctl set-default "" 2>/dev/null || true
+    # Use bootctl status which has more stable output than bootctl list
+    if command -v bootctl >/dev/null 2>&1; then
+        local default_entry
+        default_entry=$(bootctl status 2>/dev/null | sed -n 's/.*default:.*arch-env-\([^.]*\)\.efi.*/\1/p' | head -1) || true
+        if [[ "$default_entry" == "$name" ]]; then
+            echo "   Resetting boot default (was set to this environment)"
+            bootctl set-default "" 2>/dev/null || true
+        fi
     fi
 
     echo "Environment '${name}' deleted."
@@ -525,8 +539,8 @@ do_list() {
 
     local found=0
 
-    printf "%-20s %-45s %s\n" "ENVIRONMENT" "UKI" "STATUS"
-    printf "%-20s %-45s %s\n" "───────────" "───" "──────"
+    printf "%-20s %-10s %-40s %s\n" "ENVIRONMENT" "HOME" "UKI" "STATUS"
+    printf "%-20s %-10s %-40s %s\n" "───────────" "────" "───" "──────"
 
     for uki_file in "${ESP}/EFI/Linux/arch-env-"*.efi; do
         [[ -e "$uki_file" ]] || continue
@@ -536,15 +550,25 @@ do_list() {
         local name="${filename#arch-env-}"
         name="${name%.efi}"
 
-        local sv
+        local sv hv
         sv=$(env_subvol "$name")
+        hv=$(env_home_subvol "$name")
 
         local status=""
         if [[ "$sv" == "$current_subvol" ]]; then
             status="● booted"
         fi
 
-        printf "%-20s %-45s %s\n" "$name" "$uki_file" "$status"
+        # Check home type
+        local home_type="shared"
+        # Try to check if the home subvolume exists
+        if ensure_btrfs_mounted 2>/dev/null; then
+            if [[ -d "${BTRFS_MOUNT}/${hv}" ]]; then
+                home_type="isolated"
+            fi
+        fi
+
+        printf "%-20s %-10s %-40s %s\n" "$name" "$home_type" "$uki_file" "$status"
         found=1
     done
 
