@@ -11,7 +11,7 @@ Usage:
 
 Safety features:
   - Only modifies entries with the target mountpoint
-  - Creates .bak backup before writing
+  - Creates backup before writing
   - Atomic write via tmp+rename
   - Post-write verification with auto-rollback
   - Preserves leading slash style in subvol= values
@@ -155,8 +155,8 @@ class FstabEntry:
         )
 
 
-def _atomic_write(path: Path, entries: list, backup: Path) -> bool:
-    """Write entries to fstab atomically with backup and verification helper.
+def _atomic_write(path: Path, entries: list) -> bool:
+    """Write entries to fstab atomically.
 
     Returns True on successful write (caller must verify content).
     """
@@ -248,7 +248,7 @@ def update_fstab(path_str: str, old_subvol: str, new_subvol: str) -> bool:
             file=sys.stderr,
         )
 
-    _atomic_write(path, entries, backup)
+    _atomic_write(path, entries)
 
     # Post-write verification
     new_norm = new_subvol.strip("/")
@@ -257,6 +257,9 @@ def update_fstab(path_str: str, old_subvol: str, new_subvol: str) -> bool:
         print("ERROR: Verification failed, restoring backup", file=sys.stderr)
         shutil.copy2(backup, path)
         return False
+
+    # Clean up backup on success
+    backup.unlink(missing_ok=True)
 
     return True
 
@@ -346,7 +349,7 @@ def update_fstab_home(path_str: str, new_home_subvol: str) -> bool:
             file=sys.stderr,
         )
 
-    _atomic_write(path, entries, backup)
+    _atomic_write(path, entries)
 
     # Post-write verification
     text = path.read_text()
