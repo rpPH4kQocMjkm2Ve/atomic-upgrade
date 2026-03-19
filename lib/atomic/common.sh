@@ -15,6 +15,9 @@ KERNEL_PKG="linux"
 LOCK_FILE="/var/lock/atomic-upgrade.lock"
 SBCTL_SIGN=0
 UPGRADE_GUARD=1
+# Files to copy from current /home/<user>/ into env/ephemeral home
+# Space-separated list of relative paths (globs not supported)
+HOME_COPY_FILES=""
 # Kernel security parameters
 KERNEL_PARAMS="rw slab_nomerge init_on_alloc=1 page_alloc.shuffle=1 pti=on vsyscall=none randomize_kstack_offset=on debugfs=off"
 
@@ -34,7 +37,7 @@ load_config() {
     fi
 
     # Whitelist of allowed config keys
-    local -a allowed=(BTRFS_MOUNT NEW_ROOT ESP KEEP_GENERATIONS MAPPER_NAME KERNEL_PARAMS KERNEL_PKG SBCTL_SIGN UPGRADE_GUARD)
+    local -a allowed=(BTRFS_MOUNT NEW_ROOT ESP KEEP_GENERATIONS MAPPER_NAME KERNEL_PARAMS KERNEL_PKG SBCTL_SIGN UPGRADE_GUARD HOME_COPY_FILES)
 
     while IFS='=' read -r key value; do
         # Strip whitespace
@@ -181,53 +184,86 @@ update_fstab() {
     python3 /usr/lib/atomic/fstab.py "$@"
 }
 
-# ── fstab /home update (sed-based) ─────────────────────────────────
+# ── fstab /home update (delegates to Python) ────────────────────────
 # Updates the /home mount entry's subvol= to point to a new subvolume.
 # Used by ephemeral generations and named environments.
 #
 # Args: $1 = fstab path, $2 = new home subvolume name
 
 update_fstab_home() {
-    local fstab_path="$1"
-    local new_home_subvol="$2"
+    python3 /usr/lib/atomic/fstab.py home "$@"
+}
 
-    [[ -f "$fstab_path" ]] || {
-        echo "ERROR: fstab not found: ${fstab_path}" >&2
-        return 1
-    }
+# ── Home skeleton population ────────────────────────────────────────
+# Creates user directories in a new home subvolume with correct
+# ownership/permissions. Optionally copies specific files.
+#
+# Args:
+#   $1 = target home path (e.g. ${BTRFS_MOUNT}/${hv})
+#   $2 = space-separated list of files to copy (optional, overrides HOME_COPY_FILES)
 
-    # Normalize: strip leading slashes from the new name
-    new_home_subvol="${new_home_subvol#/}"
+populate_home_skeleton() {
+    local target_home="$1"
+    local copy_files="${2:-${HOME_COPY_FILES}}"
 
-    # Check if there's a /home entry with subvol= at all
-    if ! grep -v '^\s*#' "$fstab_path" | grep -qE '[[:space:]]/home[[:space:]].*subvol='; then
-        echo "WARN: No /home entry with subvol= found in fstab" >&2
-        echo "WARN: Environment will share the host /home directory" >&2
-        return 1
-    fi
+    [[ -d "/home" ]] || return 0
 
-    # Create backup
-    cp -a "$fstab_path" "${fstab_path}.home-bak"
+    local user_dir username target
+    for user_dir in /home/*/; do
+        [[ -d "$user_dir" ]] || continue
+        username=$(basename "$user_dir")
+        target="${target_home}/${username}"
+        mkdir -p "$target"
+        # Preserve ownership and permissions
+        chown --reference="$user_dir" "$target" 2>/dev/null || true
+        chmod --reference="$user_dir" "$target" 2>/dev/null || true
 
-    # Replace subvol= value on lines where mountpoint is /home
-    # The regex:
-    #   - Skips comment lines (^\s*#)
-    #   - Matches lines with /home as a whitespace-delimited field
-    #   - Replaces subvol=/anything with subvol=/new_value
-    #   - Handles both subvol=/path and subvol=path (normalizes to /path)
-    sed -i -E \
-        '/^\s*#/!{ /[[:space:]]\/home[[:space:]]/s|(subvol=)/?[^,[:space:]]+|\1/'"${new_home_subvol}"'| }' \
-        "$fstab_path"
+        # Copy specified files if any
+        if [[ -n "$copy_files" ]]; then
+            local file_rel
+            for file_rel in $copy_files; do
+                # Sanitize: no absolute paths, no ..
+                case "$file_rel" in
+                    /*|*../*|*/../*)
+                        echo "WARN: Skipping unsafe path: ${file_rel}" >&2
+                        continue
+                        ;;
+                esac
 
-    # Verify the change took effect
-    if grep -v '^\s*#' "$fstab_path" | grep -qE "[[:space:]]/home[[:space:]].*subvol=/?${new_home_subvol}"; then
-        rm -f "${fstab_path}.home-bak"
-        return 0
+                local src="${user_dir}${file_rel}"
+                local dst="${target}/${file_rel}"
+
+                if [[ -e "$src" ]]; then
+                    # Create parent directory if needed
+                    local dst_dir
+                    dst_dir=$(dirname "$dst")
+                    if [[ ! -d "$dst_dir" ]]; then
+                        mkdir -p "$dst_dir"
+                        # Copy ownership from source parent
+                        local src_dir
+                        src_dir=$(dirname "$src")
+                        chown --reference="$src_dir" "$dst_dir" 2>/dev/null || true
+                        chmod --reference="$src_dir" "$dst_dir" 2>/dev/null || true
+                    fi
+
+                    if [[ -d "$src" ]]; then
+                        cp -a "$src" "$dst" 2>/dev/null || {
+                            echo "WARN: Failed to copy directory: ${file_rel}" >&2
+                        }
+                    else
+                        cp -a "$src" "$dst" 2>/dev/null || {
+                            echo "WARN: Failed to copy file: ${file_rel}" >&2
+                        }
+                    fi
+                fi
+            done
+        fi
+    done
+
+    if [[ -n "$copy_files" ]]; then
+        echo "   Home skeleton created with files: ${copy_files}"
     else
-        echo "ERROR: fstab /home update verification failed, restoring backup" >&2
-        cp -a "${fstab_path}.home-bak" "$fstab_path"
-        rm -f "${fstab_path}.home-bak"
-        return 1
+        echo "   Home skeleton created from current /home"
     fi
 }
 
@@ -486,6 +522,7 @@ garbage_collect() {
     [[ -z "$generations" ]] && { echo "   No generations found"; return 0; }
 
     # Phase 1: auto-delete stale ephemeral generations
+    local ephemeral_deleted=0
     for gen_id in $generations; do
         [[ "$gen_id" == env-* ]] && continue
 
@@ -495,16 +532,18 @@ garbage_collect() {
         if [[ -f "${BTRFS_MOUNT}/${subvol_name}/.atomic-ephemeral" ]]; then
             echo "   Ephemeral: ${gen_id} (auto-removing)"
             if [[ "$dry_run" -eq 0 ]]; then
-                delete_generation "$gen_id" 0 "$current_subvol"
+                delete_generation "$gen_id" 0 "$current_subvol" && ephemeral_deleted=1
             else
                 echo "   Would delete ephemeral: ${gen_id}"
             fi
         fi
     done
 
-    # Re-read generations after ephemeral cleanup
-    generations=$(list_generations)
-    [[ -z "$generations" ]] && { echo "   No generations remaining"; return 0; }
+    # Re-read generations after ephemeral cleanup only if we actually deleted something
+    if [[ $ephemeral_deleted -eq 1 ]]; then
+        generations=$(list_generations)
+        [[ -z "$generations" ]] && { echo "   No generations remaining"; return 0; }
+    fi
 
     # Phase 2: standard keep/delete cycle for regular generations
     local -a to_keep=()
@@ -519,6 +558,12 @@ garbage_collect() {
 
         if [[ "$subvol_name" == "$current_subvol" ]]; then
             to_keep+=("$gen_id (current)")
+            continue
+        fi
+
+        # Skip any remaining ephemeral entries (deletion may have failed)
+        if [[ -f "${BTRFS_MOUNT}/${subvol_name}/.atomic-ephemeral" ]]; then
+            echo "   WARN: Ephemeral ${gen_id} still present after cleanup attempt" >&2
             continue
         fi
 
