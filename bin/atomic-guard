@@ -8,7 +8,15 @@
 # checks and process-tree walking that would break with errexit.
 
 readonly LIBDIR="/usr/lib/atomic"
-_p=$(verify-lib "${LIBDIR}/common.sh" "$LIBDIR/" 2>/dev/null) && source "$_p"
+
+# Load common.sh with graceful degradation
+_COMMON_LOADED=0
+if _p=$(verify-lib "${LIBDIR}/common.sh" "$LIBDIR/" 2>/dev/null) && [[ -n "$_p" ]]; then
+    if source "$_p" 2>/dev/null; then
+        _COMMON_LOADED=1
+    fi
+fi
+
 LOCK_FILE="${LOCK_FILE:-/var/lock/atomic-upgrade.lock}"
 
 # If guard is disabled in config, allow everything
@@ -58,11 +66,32 @@ if ! is_sysupgrade; then
 fi
 
 # Allow AUR helpers — walk up the process tree via /proc
-
-if type -t is_child_of_aur_helper &>/dev/null && is_child_of_aur_helper; then
-    echo -e "\033[33mNOTE: AUR helper sysupgrade runs on live system (not atomic)\033[0m" >&2
-    echo -e "\033[33m      For atomic upgrades use: sudo atomic-upgrade\033[0m" >&2
-    exit 0
+# Only available if common.sh was loaded successfully
+if [[ $_COMMON_LOADED -eq 1 ]]; then
+    if type -t is_child_of_aur_helper &>/dev/null && is_child_of_aur_helper; then
+        echo -e "\033[33mNOTE: AUR helper sysupgrade runs on live system (not atomic)\033[0m" >&2
+        echo -e "\033[33m      For atomic upgrades use: sudo atomic-upgrade\033[0m" >&2
+        exit 0
+    fi
+else
+    # Fallback: inline AUR helper check when common.sh failed to load
+    _check_aur_helper() {
+        local pid=$$
+        while [[ $pid -ne 1 ]]; do
+            local comm
+            comm=$(cat "/proc/$pid/comm" 2>/dev/null) || break
+            case "$comm" in
+                yay|paru|pikaur|aura) return 0 ;;
+            esac
+            pid=$(awk '/^PPid:/{print $2}' "/proc/$pid/status" 2>/dev/null) || break
+        done
+        return 1
+    }
+    if _check_aur_helper; then
+        echo -e "\033[33mNOTE: AUR helper sysupgrade runs on live system (not atomic)\033[0m" >&2
+        echo -e "\033[33m      For atomic upgrades use: sudo atomic-upgrade\033[0m" >&2
+        exit 0
+    fi
 fi
 
 cat << 'EOF'
