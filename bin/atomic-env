@@ -177,6 +177,12 @@ do_create() {
         esac
     done
 
+    # --copy-files is meaningless without a home to copy into
+    if [[ $no_home -eq 1 && -n "$copy_files" ]]; then
+        echo "ERROR: --copy-files conflicts with --no-home" >&2
+        exit 1
+    fi
+
     local sv hv uki_path
     sv=$(env_subvol "$name")
     hv=$(env_home_subvol "$name")
@@ -284,7 +290,7 @@ do_create() {
         # the snapshot inherited that reference. Reset to default "home" subvol.
         local inherited_home_sv
         inherited_home_sv=$(awk '$2=="/home" && /subvol=/' "${mount_dir}/etc/fstab" | \
-            sed -n 's/.*subvol=\/?//; s/[, ].*//' | head -1) || true
+            sed -E 's/.*subvol=\/?//; s/[, ].*//' | head -1) || true
         if [[ "$inherited_home_sv" == ephemeral-home-* || "$inherited_home_sv" == env-*-home ]]; then
             echo ":: Resetting /home (inherited isolated reference: ${inherited_home_sv})"
             update_fstab_home "${mount_dir}/etc/fstab" "home" || {
@@ -595,6 +601,13 @@ do_boot() {
         exit 1
     fi
 
+    if [[ -z "$default_name" && $reset -eq 0 ]]; then
+        echo "ERROR: Specify --default NAME or --reset" >&2
+        exit 1
+    fi
+
+    acquire_lock
+
     if [[ $reset -eq 1 ]]; then
         echo ":: Resetting boot default..."
         local loader_conf="${ESP}/loader/loader.conf"
@@ -606,11 +619,6 @@ do_boot() {
         fi
         echo "Boot default cleared. System will use firmware/bootloader default."
         exit 0
-    fi
-
-    if [[ -z "$default_name" ]]; then
-        echo "ERROR: Specify --default NAME or --reset" >&2
-        exit 1
     fi
 
     validate_env_name "$default_name" || exit 1
@@ -635,8 +643,6 @@ do_boot() {
             exit 1
         fi
     fi
-
-    acquire_lock
 
     # UKI filename for bootctl (Type #2 entries use filename, not path)
     local uki_entry="arch-env-${default_name}.efi"
