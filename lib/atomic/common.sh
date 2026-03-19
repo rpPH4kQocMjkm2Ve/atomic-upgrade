@@ -40,8 +40,9 @@ load_config() {
     local -a allowed=(BTRFS_MOUNT NEW_ROOT ESP KEEP_GENERATIONS MAPPER_NAME KERNEL_PARAMS KERNEL_PKG SBCTL_SIGN UPGRADE_GUARD HOME_COPY_FILES)
 
     while IFS='=' read -r key value; do
-        # Strip whitespace
-        key="${key// /}"
+        # Strip leading/trailing whitespace from key
+        key="${key#"${key%%[![:space:]]*}"}"
+        key="${key%"${key##*[![:space:]]}"}"
         # Trim leading/trailing whitespace from value
         value="${value#"${value%%[![:space:]]*}"}"
         value="${value%"${value##*[![:space:]]}"}"
@@ -213,10 +214,13 @@ populate_home_skeleton() {
 
     [[ -d "/home" ]] || return 0
 
-    local user_dir username target
+    local user_dir username target uid
     for user_dir in /home/*/; do
         [[ -d "$user_dir" ]] || continue
         username=$(basename "$user_dir")
+        # Skip non-user directories (lost+found, system dirs)
+        uid=$(id -u "$username" 2>/dev/null) || continue
+        [[ $uid -ge 1000 ]] || continue
         target="${target_home}/${username}"
         mkdir -p "$target"
         # Preserve ownership and permissions
