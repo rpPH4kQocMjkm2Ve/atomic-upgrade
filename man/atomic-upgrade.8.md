@@ -52,7 +52,7 @@ Use it to recover an accidentally deleted *.efi* file.
 **\--separate-home**
 :   Create an isolated */home* Btrfs subvolume for this generation. The
     subvolume is named *home-TAG*, so **\--tag** is required. If a subvolume
-    with that name already exists, it is reused. See **EXPERIMENTAL HOME
+    with that name already exists, it is reused. See **HOME
     ISOLATION** below.
 
 **\--copy-files** *"FILE ..."*
@@ -71,7 +71,7 @@ Use it to recover an accidentally deleted *.efi* file.
 **-V**, **\--version**
 :   Show version and exit.
 
-# EXPERIMENTAL HOME ISOLATION
+# HOME ISOLATION
 
 **This feature is for throwaway experiments, not permanent environments.**
 Permanent setups should use regular generations with the shared */home*

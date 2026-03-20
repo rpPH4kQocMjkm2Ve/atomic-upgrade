@@ -160,7 +160,7 @@ Edit `/etc/atomic.conf`:
 | `KERNEL_PARAMS` | *(security defaults)* | Kernel command line parameters |
 | `SBCTL_SIGN` | `0` | Sign UKI files with sbctl for Secure Boot (`0`=off, `1`=on) |
 | `UPGRADE_GUARD` | `1` | Upgrade guard: block direct `pacman -Syu` (`0`=off, `1`=on) |
-| `HOME_COPY_FILES` | *(empty)* | Files to copy into isolated home subvolumes (see [Experimental home isolation](#experimental-home-isolation)) |
+| `HOME_COPY_FILES` | *(empty)* | Files to copy into isolated home subvolumes (see [Home isolation](#home-isolation)) |
 
 Default `KERNEL_PARAMS`: `rw slab_nomerge init_on_alloc=1 page_alloc.shuffle=1 pti=on vsyscall=none randomize_kstack_offset=on debugfs=off`
 
@@ -242,7 +242,7 @@ sudo atomic-upgrade -- bash -c '/usr/bin/pacman -Syu && sudo -u YOUR_USER yay -S
 > upgrade applies to the live system and is **not atomic**. The next
 > `atomic-upgrade` will snapshot whatever state the live system is in.
 
-## Experimental home isolation
+## Home isolation
 
 > **This feature is for throwaway experiments, not permanent environments.**
 > Permanent setups should use regular generations with the shared `/home` subvolume.
