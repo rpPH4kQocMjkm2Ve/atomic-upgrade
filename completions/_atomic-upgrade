@@ -1,0 +1,16 @@
+#compdef atomic-upgrade
+
+_atomic-upgrade() {
+    _arguments \
+        '(- *)'{-h,--help}'[Show help]' \
+        '(- *)'{-V,--version}'[Show version]' \
+        '(-n --dry-run)'{-n,--dry-run}'[Show what would be done]' \
+        '(-t --tag)'{-t,--tag}'[Custom tag for snapshot]:tag:' \
+        '--no-gc[Skip garbage collection]' \
+        '--separate-home[Create isolated /home subvolume (requires --tag)]' \
+        '--copy-files[Copy files into new home]:file list:' \
+        '(-)--[Command separator]' \
+        '*:command:_command_names'
+}
+
+_atomic-upgrade "$@"

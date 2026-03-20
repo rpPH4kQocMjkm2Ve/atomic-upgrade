@@ -42,10 +42,14 @@ install:
 		$(DESTDIR)$(ZSH_COMPDIR)/_atomic-gc
 	install -Dm644 completions/_atomic-rebuild-uki \
 		$(DESTDIR)$(ZSH_COMPDIR)/_atomic-rebuild-uki
+	install -Dm644 completions/_atomic-upgrade \
+		$(DESTDIR)$(ZSH_COMPDIR)/_atomic-upgrade
 	install -Dm644 completions/atomic-gc.bash \
 		$(DESTDIR)$(BASH_COMPDIR)/atomic-gc
 	install -Dm644 completions/atomic-rebuild-uki.bash \
 		$(DESTDIR)$(BASH_COMPDIR)/atomic-rebuild-uki
+	install -Dm644 completions/atomic-upgrade.bash \
+		$(DESTDIR)$(BASH_COMPDIR)/atomic-upgrade
 
 	install -Dm644 hooks/00-block-direct-upgrade.hook \
 		$(DESTDIR)$(HOOKSDIR)/00-block-direct-upgrade.hook
@@ -73,8 +77,10 @@ uninstall:
 	rm -rf $(DESTDIR)$(LIBDIR)/
 	rm -f  $(DESTDIR)$(ZSH_COMPDIR)/_atomic-gc
 	rm -f  $(DESTDIR)$(ZSH_COMPDIR)/_atomic-rebuild-uki
+	rm -f  $(DESTDIR)$(ZSH_COMPDIR)/_atomic-upgrade
 	rm -f  $(DESTDIR)$(BASH_COMPDIR)/atomic-gc
 	rm -f  $(DESTDIR)$(BASH_COMPDIR)/atomic-rebuild-uki
+	rm -f  $(DESTDIR)$(BASH_COMPDIR)/atomic-upgrade
 	rm -f  $(DESTDIR)$(HOOKSDIR)/00-block-direct-upgrade.hook
 	rm -f  $(DESTDIR)$(PREFIX)/local/bin/pacman
 	rm -f  $(DESTDIR)$(MANDIR)/man8/atomic-upgrade.8
