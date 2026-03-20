@@ -5,7 +5,7 @@ from pathlib import Path
 
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'lib', 'atomic'))
-from fstab import FstabEntry, update_fstab
+from fstab import FstabEntry, update_fstab, update_fstab_home
 
 
 class TestFstabEntryParse:
@@ -137,13 +137,14 @@ class TestUpdateFstab:
         assert "root-new" in text
         assert "subvol=home" in text
 
-    def test_backup_created(self, tmp_path):
+    def test_backup_cleaned_after_success(self, tmp_path):
+        """Backup is created during write but removed on success."""
         path = tmp_path / "fstab"
         path.write_text("UUID=x / btrfs rw,subvol=root-old 0 0\n")
         update_fstab(str(path), "root-old", "root-new")
         bak = tmp_path / "fstab.bak"
-        assert bak.exists()
-        assert "root-old" in bak.read_text()
+        assert not bak.exists()
+        assert "root-new" in path.read_text()
 
     def test_no_root_entry(self, tmp_path):
         path = tmp_path / "fstab"
@@ -267,3 +268,157 @@ class TestUpdateFstab:
         assert "subvol=root-old not found" in err
         # Must NOT mention subvolid since there is none
         assert "subvolid=" not in err
+
+
+class TestSetSubvol:
+    """Tests for FstabEntry.set_subvol() — unconditional subvol replacement."""
+
+    def test_basic_replacement(self):
+        e = FstabEntry.parse("UUID=x /home btrfs rw,subvol=/home 0 0\n")
+        assert e.set_subvol("home-kde")
+        assert "subvol=/home-kde" in e.options
+
+    def test_preserves_leading_slash(self):
+        e = FstabEntry.parse("UUID=x /home btrfs rw,subvol=/home 0 0\n")
+        e.set_subvol("home-kde")
+        assert "subvol=/home-kde" in e.options
+
+    def test_no_leading_slash_preserved(self):
+        e = FstabEntry.parse("UUID=x /home btrfs rw,subvol=home 0 0\n")
+        e.set_subvol("home-kde")
+        assert "subvol=home-kde" in e.options
+        assert "/home-kde" not in e.options
+
+    def test_already_set_no_change(self):
+        e = FstabEntry.parse("UUID=x /home btrfs rw,subvol=/home-kde 0 0\n")
+        assert not e.set_subvol("home-kde")
+
+    def test_preserves_other_options(self):
+        e = FstabEntry.parse(
+            "UUID=x /home btrfs rw,noatime,subvol=/home,compress=zstd 0 0\n"
+        )
+        e.set_subvol("home-dev")
+        opts = e.options.split(",")
+        assert "rw" in opts
+        assert "noatime" in opts
+        assert "compress=zstd" in opts
+        assert "subvol=/home-dev" in opts
+
+    def test_comment_line(self):
+        e = FstabEntry.parse("# subvol=home\n")
+        assert not e.set_subvol("home-new")
+
+    def test_input_slash_stripped(self):
+        """Input with leading slash is normalized."""
+        e = FstabEntry.parse("UUID=x /home btrfs rw,subvol=/home 0 0\n")
+        e.set_subvol("/home-kde")
+        assert "subvol=/home-kde" in e.options
+
+    def test_no_subvol_option(self):
+        """Entry without subvol= → no change."""
+        e = FstabEntry.parse("UUID=x /home btrfs rw,noatime 0 0\n")
+        assert not e.set_subvol("home-kde")
+
+
+class TestUpdateFstabHome:
+    """Tests for update_fstab_home() function."""
+
+    def test_basic_replacement(self, tmp_path):
+        path = tmp_path / "fstab"
+        path.write_text(
+            "UUID=x / btrfs rw,subvol=/root-old 0 0\n"
+            "UUID=x /home btrfs rw,subvol=/home 0 0\n"
+        )
+        assert update_fstab_home(str(path), "home-kde")
+        text = path.read_text()
+        assert "subvol=/home-kde" in text
+        # Root entry untouched
+        assert "subvol=/root-old" in text
+
+    def test_no_home_entry(self, tmp_path):
+        path = tmp_path / "fstab"
+        path.write_text("UUID=x / btrfs rw,subvol=/root-old 0 0\n")
+        assert not update_fstab_home(str(path), "home-kde")
+
+    def test_no_subvol_in_home(self, tmp_path):
+        path = tmp_path / "fstab"
+        path.write_text(
+            "UUID=x / btrfs rw,subvol=/root-old 0 0\n"
+            "UUID=y /home ext4 rw,noatime 0 0\n"
+        )
+        assert not update_fstab_home(str(path), "home-kde")
+
+    def test_already_set(self, tmp_path):
+        path = tmp_path / "fstab"
+        path.write_text(
+            "UUID=x /home btrfs rw,subvol=/home-kde 0 0\n"
+        )
+        assert update_fstab_home(str(path), "home-kde")
+
+    def test_nonexistent_file(self):
+        assert not update_fstab_home("/nonexistent/fstab", "home-kde")
+
+    def test_empty_subvol_name(self, tmp_path):
+        path = tmp_path / "fstab"
+        path.write_text("UUID=x /home btrfs rw,subvol=/home 0 0\n")
+        assert not update_fstab_home(str(path), "")
+
+    def test_invalid_subvol_name(self, tmp_path):
+        path = tmp_path / "fstab"
+        path.write_text("UUID=x /home btrfs rw,subvol=/home 0 0\n")
+        assert not update_fstab_home(str(path), "../etc/passwd")
+
+    def test_permissions_preserved(self, tmp_path):
+        path = tmp_path / "fstab"
+        path.write_text("UUID=x /home btrfs rw,subvol=/home 0 0\n")
+        path.chmod(0o644)
+        update_fstab_home(str(path), "home-kde")
+        assert path.stat().st_mode & 0o7777 == 0o644
+
+    def test_backup_cleaned_up_on_success(self, tmp_path):
+        path = tmp_path / "fstab"
+        path.write_text("UUID=x /home btrfs rw,subvol=/home 0 0\n")
+        update_fstab_home(str(path), "home-kde")
+        assert not (tmp_path / "fstab.home-bak").exists()
+
+    def test_root_untouched(self, tmp_path):
+        path = tmp_path / "fstab"
+        path.write_text(
+            "UUID=x / btrfs rw,subvol=/root-20250601 0 0\n"
+            "UUID=x /home btrfs rw,subvol=/home 0 0\n"
+            "UUID=x /var/log btrfs rw,subvol=/log 0 0\n"
+        )
+        update_fstab_home(str(path), "home-dev")
+        text = path.read_text()
+        assert "subvol=/root-20250601" in text
+        assert "subvol=/home-dev" in text
+        assert "subvol=/log" in text
+
+    def test_preserves_comments(self, tmp_path):
+        path = tmp_path / "fstab"
+        path.write_text(
+            "# home filesystem\n"
+            "UUID=x /home btrfs rw,subvol=/home 0 0\n"
+        )
+        update_fstab_home(str(path), "home-kde")
+        text = path.read_text()
+        assert "# home filesystem" in text
+        assert "subvol=/home-kde" in text
+
+    def test_real_fstab(self, tmp_path):
+        path = tmp_path / "fstab"
+        path.write_text(
+            "# /etc/fstab\n"
+            "\n"
+            "UUID=ABCD-1234 /efi vfat rw,relatime 0 2\n"
+            "UUID=aaaa-bbbb / btrfs rw,noatime,compress=zstd:3,subvol=/root-20250220-141710 0 0\n"
+            "UUID=aaaa-bbbb /home btrfs rw,noatime,compress=zstd:3,subvol=/home 0 0\n"
+            "UUID=aaaa-bbbb /var/log btrfs rw,noatime,compress=zstd:3,subvol=/log 0 0\n"
+            "tmpfs /tmp tmpfs defaults,noatime,mode=1777 0 0\n"
+        )
+        assert update_fstab_home(str(path), "home-kde")
+        text = path.read_text()
+        assert "subvol=/home-kde" in text
+        assert "subvol=/root-20250220-141710" in text
+        assert "subvol=/log" in text
+        assert "ABCD-1234" in text

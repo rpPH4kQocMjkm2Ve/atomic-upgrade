@@ -172,6 +172,7 @@ section "Function definitions"
 EXPECTED_FUNCTIONS=(
     load_config validate_config check_dependencies acquire_lock
     is_child_of_aur_helper sign_uki verify_uki update_fstab
+    update_fstab_home populate_home_skeleton
     get_current_subvol get_current_subvol_raw get_root_device
     ensure_btrfs_mounted validate_subvolume check_btrfs_space
     check_esp_space list_generations build_uki garbage_collect
@@ -200,6 +201,7 @@ assert_eq "KERNEL_PKG default"  "linux"                  "$KERNEL_PKG"
 assert_eq "LOCK_FILE default"   "/var/lock/atomic-upgrade.lock" "$LOCK_FILE"
 assert_eq "SBCTL_SIGN default"  "0"                      "$SBCTL_SIGN"
 assert_eq "UPGRADE_GUARD default" "1"                    "$UPGRADE_GUARD"
+assert_eq "HOME_COPY_FILES default" ""                   "$HOME_COPY_FILES"
 assert_match "KERNEL_PARAMS contains rw"     "rw"     "$KERNEL_PARAMS"
 assert_match "KERNEL_PARAMS contains pti=on" "pti=on" "$KERNEL_PARAMS"
 
@@ -966,6 +968,120 @@ section "is_child_of_aur_helper"
 # In a normal test run we are not a child of yay/paru
 run_cmd is_child_of_aur_helper
 assert_eq "not child of aur helper" "1" "$_rc"
+
+# ── HOME_COPY_FILES config ─────────────────────
+
+section "HOME_COPY_FILES config"
+
+# Test: HOME_COPY_FILES loaded from config
+CONFIG_FILE="${TESTDIR}/home_copy.conf"
+cat > "$CONFIG_FILE" <<'EOF'
+HOME_COPY_FILES=.bashrc .ssh .gitconfig
+EOF
+HOME_COPY_FILES=""
+load_config
+assert_eq "HOME_COPY_FILES loaded" ".bashrc .ssh .gitconfig" "$HOME_COPY_FILES"
+
+# Test: HOME_COPY_FILES with quotes
+CONFIG_FILE="${TESTDIR}/home_copy_quoted.conf"
+cat > "$CONFIG_FILE" <<'EOF'
+HOME_COPY_FILES=".bashrc .bash_profile .ssh"
+EOF
+HOME_COPY_FILES=""
+load_config
+assert_eq "HOME_COPY_FILES quoted" ".bashrc .bash_profile .ssh" "$HOME_COPY_FILES"
+
+# Test: HOME_COPY_FILES absent → default preserved
+CONFIG_FILE="${TESTDIR}/home_copy_absent.conf"
+cat > "$CONFIG_FILE" <<'EOF'
+KEEP_GENERATIONS=3
+EOF
+HOME_COPY_FILES=""
+load_config
+assert_eq "HOME_COPY_FILES absent → stays empty" "" "$HOME_COPY_FILES"
+
+# Restore
+HOME_COPY_FILES=""
+
+
+# ── config key whitespace trimming ─────────────
+
+section "Config key whitespace trimming"
+
+CONFIG_FILE="${TESTDIR}/whitespace_key.conf"
+printf '  KEEP_GENERATIONS=7\n' > "$CONFIG_FILE"
+printf '\tESP=/boot/efi\n' >> "$CONFIG_FILE"
+KEEP_GENERATIONS=3
+ESP="/efi"
+load_config
+assert_eq "leading spaces in key trimmed" "7" "$KEEP_GENERATIONS"
+assert_eq "leading tab in key trimmed" "/boot/efi" "$ESP"
+KEEP_GENERATIONS=3
+ESP="/efi"
+
+
+# ── populate_home_skeleton ─────────────────────
+
+section "populate_home_skeleton"
+
+# Test: unsafe path rejection (absolute path)
+# Function iterates /home/* which may be empty in CI —
+# Safety checks are inside the per-user loop, so if /home is empty
+# in CI the paths won't be exercised — but the function must not crash
+# the function doesn't crash and doesn't emit "Failed"
+_PHS_TARGET="${TESTDIR}/phs_target"
+mkdir -p "$_PHS_TARGET"
+
+run_cmd populate_home_skeleton "$_PHS_TARGET" "/etc/passwd"
+assert_eq "absolute path does not crash" "0" "$_rc"
+assert_not_contains "absolute path no failure" "Failed" "$_out"
+
+# Test: unsafe path rejection (path traversal)
+run_cmd populate_home_skeleton "$_PHS_TARGET" "../../../etc/shadow"
+assert_eq "traversal does not crash" "0" "$_rc"
+assert_not_contains "traversal no failure" "Failed" "$_out"
+
+# Test: empty copy_files produces skeleton message
+run_cmd populate_home_skeleton "$_PHS_TARGET" ""
+assert_eq "empty copy_files does not crash" "0" "$_rc"
+
+# ── orphan home subvolumes in GC ──────────────
+
+section "garbage_collect: orphan home subvolumes"
+
+ESP="${TESTDIR}/esp_orphan_home"
+BTRFS_MOUNT="${TESTDIR}/btrfs_orphan_home"
+mkdir -p "${ESP}/EFI/Linux" "$BTRFS_MOUNT"
+
+make_mock findmnt    'echo "rw,subvol=/root-20250605-120000"'
+make_mock btrfs      'exit 0'
+make_mock mountpoint 'exit 0'
+_ROOT_DEVICE="${TESTDIR}/fake_dev/root_crypt"
+
+# Current generation
+touch "${ESP}/EFI/Linux/arch-20250605-120000.efi"
+mkdir -p "${BTRFS_MOUNT}/root-20250605-120000"
+
+# Generation with tag "kde"
+touch "${ESP}/EFI/Linux/arch-20250604-100000-kde.efi"
+mkdir -p "${BTRFS_MOUNT}/root-20250604-100000-kde"
+
+# Home subvolume matching the tag — NOT orphan
+mkdir -p "${BTRFS_MOUNT}/home-kde"
+
+# Orphan home subvolume — no generation with tag "old-test"
+mkdir -p "${BTRFS_MOUNT}/home-old-test"
+
+run_cmd garbage_collect 3 0
+assert_contains "orphan home detected" "Orphan home" "$_out"
+assert_contains "orphan mentions tag" "old-test" "$_out"
+assert_not_contains "non-orphan home not flagged" "Orphan home: home-kde" "$_out"
+
+# Verify home subvolumes are never deleted (even orphans)
+[[ -d "${BTRFS_MOUNT}/home-old-test" ]] \
+    && ok "orphan home NOT auto-deleted" || fail "orphan home was deleted"
+[[ -d "${BTRFS_MOUNT}/home-kde" ]] \
+    && ok "active home preserved" || fail "active home was deleted"
 
 
 # ═══════════════════════════════════════════════════════════════
