@@ -599,6 +599,47 @@ garbage_collect() {
     echo ":: Garbage collection done"
 }
 
+# ── Orphan home warning ──────────────────────────────────────────────
+# Warns if deleting the given generation(s) would leave home-<tag>
+# subvolumes with no remaining generations referencing their tag.
+# Args: gen_id [gen_id ...]
+
+warn_orphan_homes() {
+    local -a del_ids=("$@")
+    local -A seen_tags=()
+    local gen_id tag uki_file uki_gen del_id
+
+    for gen_id in "${del_ids[@]}"; do
+        [[ "$gen_id" =~ ^[0-9]{8}-[0-9]{6}-(.+)$ ]] || continue
+        tag="${BASH_REMATCH[1]}"
+        [[ -z "${seen_tags[$tag]+x}" ]] || continue
+        seen_tags[$tag]=1
+        [[ -d "${BTRFS_MOUNT}/home-${tag}" ]] || continue
+
+        # Any generation NOT in the delete list that also uses this tag?
+        local has_other=0
+        for uki_file in "${ESP}/EFI/Linux/arch-"*.efi; do
+            [[ -e "$uki_file" ]] || continue
+            uki_gen="${uki_file##*/}"
+            uki_gen="${uki_gen#arch-}"; uki_gen="${uki_gen%.efi}"
+            # Extract tag from this UKI's gen_id
+            local uki_tag=""
+            [[ "$uki_gen" =~ ^[0-9]{8}-[0-9]{6}-(.+)$ ]] && uki_tag="${BASH_REMATCH[1]}"
+            [[ "$uki_tag" == "$tag" ]] || continue
+            # Same tag — is this UKI being deleted?
+            local in_list=0
+            for del_id in "${del_ids[@]}"; do
+                [[ "$uki_gen" == "$del_id" ]] && { in_list=1; break; }
+            done
+            [[ $in_list -eq 0 ]] && { has_other=1; break; }
+        done
+
+        [[ $has_other -eq 0 ]] || continue
+        echo "NOTE: home-${tag} will become orphaned (not auto-deleted)"
+        echo "      To remove: btrfs subvolume delete ${BTRFS_MOUNT}/home-${tag}"
+    done
+}
+
 delete_generation() {
     local gen_id="$1"
     local dry_run="${2:-0}"

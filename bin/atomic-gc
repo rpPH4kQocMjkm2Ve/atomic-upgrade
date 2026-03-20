@@ -89,8 +89,11 @@ case "$COMMAND" in
         done
         if [[ "$YES" -eq 0 && "$DRY_RUN" -eq 0 ]]; then
             echo "Will delete: ${ARGS[*]}"
+            warn_orphan_homes "${ARGS[@]}"
             read -rp "Continue? [y/N] " answer
             [[ "$answer" =~ ^[Yy] ]] || { echo "Aborted"; exit 0; }
+        elif [[ "$DRY_RUN" -eq 1 ]]; then
+            warn_orphan_homes "${ARGS[@]}"
         fi
         for gen_id in "${ARGS[@]}"; do
             delete_generation "$gen_id" "$DRY_RUN"
