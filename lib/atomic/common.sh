@@ -737,6 +737,12 @@ delete_generation() {
     local dry_run="${2:-0}"
     local current_subvol="${3:-}"
 
+    # Validate gen_id format before any destructive operations
+    if [[ ! "$gen_id" =~ ^[0-9]{8}-[0-9]{6}(-.+)?$ ]]; then
+        echo "ERROR: Invalid generation ID format: ${gen_id}" >&2
+        return 1
+    fi
+
     if [[ -z "$current_subvol" ]]; then
         current_subvol=$(get_current_subvol)
         [[ -z "$current_subvol" ]] && {
