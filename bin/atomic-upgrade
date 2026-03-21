@@ -256,6 +256,26 @@ arch-chroot "$NEW_ROOT" "${CHROOT_CMD[@]}" || {
     exit 1
 }
 
+echo ":: Verifying snapshot consistency..."
+_snap_kver=""
+for _mod_dir in "${NEW_ROOT}/usr/lib/modules"/*/; do
+    [[ -f "${_mod_dir}pkgbase" ]] || continue
+    [[ "$(cat "${_mod_dir}pkgbase")" == "$KERNEL_PKG" ]] || continue
+    _snap_kver="${_mod_dir##*/}"
+done
+[[ -n "$_snap_kver" ]] || {
+    echo "ERROR: No kernel modules for ${KERNEL_PKG} in snapshot" >&2
+    exit 1
+}
+[[ -f "${NEW_ROOT}/boot/vmlinuz-${KERNEL_PKG}" ]] || {
+    echo "ERROR: Kernel missing from snapshot after upgrade" >&2
+    exit 1
+}
+[[ -f "${NEW_ROOT}/boot/initramfs-${KERNEL_PKG}.img" ]] || {
+    echo "ERROR: Initramfs missing from snapshot after upgrade" >&2
+    exit 1
+}
+
 echo ":: Updating fstab..."
 update_fstab "${NEW_ROOT}/etc/fstab" "$CURRENT_SUBVOL" "$NEW_SUBVOL" || {
     echo "ERROR: Failed to update fstab" >&2
