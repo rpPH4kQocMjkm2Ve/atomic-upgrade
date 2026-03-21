@@ -496,13 +496,17 @@ check_esp_space() {
 list_generations() {
     local -a gens=()
     local f
+    # Use nullglob so the glob yields nothing instead of a literal pattern
+    local _restore_nullglob
+    _restore_nullglob=$(shopt -p nullglob 2>/dev/null) || _restore_nullglob="shopt -u nullglob"
+    shopt -s nullglob
     for f in "${ESP}/EFI/Linux/arch-"*.efi; do
-        [[ -e "$f" ]] || continue
         local name="${f##*/}"
         name="${name#arch-}"
         name="${name%.efi}"
         gens+=("$name")
     done
+    eval "$_restore_nullglob"
     [[ ${#gens[@]} -eq 0 ]] && return 0
     printf '%s\n' "${gens[@]}" | sort -r
 }
