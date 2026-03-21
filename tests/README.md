@@ -4,7 +4,7 @@
 
 | File | Language | Framework | What it tests |
 |------|----------|-----------|---------------|
-| `test_common.sh` | Bash | Custom assertions | `common.sh` — config loading, validation, dependency checking, locking, subvol/device detection, space checks, GC, home skeleton, orphan warnings, UKI build |
+| `test_common.sh` | Bash | Custom assertions | `common.sh` — config loading, validation, dependency checking, chroot isolation, subvol/device detection, space checks, GC, home skeleton, orphan warnings, UKI build |
 | `test_integration.sh` | Bash | Custom assertions | `atomic-guard` and `pacman-wrapper` end-to-end — config propagation, lock verification, sysupgrade detection, AUR helper bypass |
 | `test_fstab.py` | Python | pytest | `fstab.py` — fstab entry parsing, `subvol=` replacement (root and /home), atomic write with permission preservation, backup/rollback, subvolid= diagnostics |
 | `test_rootdev.py` | Python | pytest | `rootdev.py` — root device detection (plain btrfs, LUKS, LVM, LUKS+LVM), bracket stripping in findmnt source, cmdline generation, CLI dispatch |
@@ -36,7 +36,8 @@ Both suites use a custom lightweight test harness (`ok`/`fail`/`assert_eq`/`asse
 - Generation listing and deletion: sort order, current-generation protection, dry run
 - Garbage collection: keep count, orphan subvolume/UKI detection, orphan home warnings, ESP-unmounted edge case
 - Space checks: btrfs native and df fallback, percentage vs absolute thresholds
-- Dependency checking: individual missing commands (btrfs, ukify, python3), LUKS→cryptsetup requirement, SBCTL_SIGN→sbctl requirement, all-present happy path
+- Dependency checking: individual missing commands (btrfs, ukify, python3, chroot, unshare), LUKS→cryptsetup requirement, SBCTL_SIGN→sbctl requirement, all-present happy path
+- Chroot isolation (`chroot_snapshot`): unshare flags (`--fork --pid --kill-child --mount --mount-proc`), environment propagation (`ATOMIC_UPGRADE`, `SYSTEMD_IN_CHROOT`, `SHELL`), command and argument forwarding, exit code propagation, LOCK_DIR bind mount setup, resolv.conf symlink save/restore (including after failure), regular resolv.conf preservation, missing resolv.conf tolerance, mount failure early return, efivarfs failure tolerance
 - Home skeleton: path traversal rejection, empty file list handling
 - UKI build: missing kernel/initramfs/os-release detection, rootdev.py failure, ukify failure and missing output, kernel version via pkgbase and fallback, `--uname` omission, cmdline composition (root device + subvol + kernel params), PRETTY_NAME rewrite, custom KERNEL_PKG, tagged gen_id
 
@@ -63,4 +64,5 @@ Standard pytest suites. No system access — all filesystem operations use `tmp_
 - No root privileges required
 - No real disks, partitions, or btrfs volumes are touched
 - Python tests use pytest's `tmp_path` fixture
-- CI runs relevant suites on push/PR when source or test files change (path-filtered, see `.github/workflows/ci.yml`)
+- CI runs relevant suites on push/PR when source or test files change (path-filtered)
+```
