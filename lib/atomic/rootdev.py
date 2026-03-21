@@ -132,7 +132,9 @@ def _detect_dm_type(mapper: str, info: dict) -> None:
             pv_raw = run(
                 "pvs", "--noheadings", "-o", "pv_name", "-S", f"vg_name={vg}",
             )
-            pv = pv_raw.strip()
+            # VG may span multiple PVs; only inspect the first one
+            pv_lines = pv_raw.strip().splitlines()
+            pv = pv_lines[0].strip() if pv_lines else ""
             if pv and "/mapper/" in pv:
                 pv_mapper = pv.rsplit("/", 1)[-1]
                 pv_table = run("dmsetup", "table", "--target", "crypt", pv_mapper)
