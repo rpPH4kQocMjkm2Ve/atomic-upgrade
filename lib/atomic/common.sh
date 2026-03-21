@@ -119,8 +119,17 @@ check_dependencies() {
     fi
 
     local root_type
-    root_type=$(python3 /usr/lib/atomic/rootdev.py detect 2>/dev/null |
-        python3 -c "import sys,json; print(json.load(sys.stdin).get('type',''))" 2>/dev/null)
+    root_type=$(python3 -c "
+import json, importlib.util, sys
+spec = importlib.util.spec_from_file_location('rootdev', '/usr/lib/atomic/rootdev.py')
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+try:
+    result = mod.detect_root()
+    print(result.get('type', '') if isinstance(result, dict) else '')
+except Exception:
+    print('')
+" 2>/dev/null)
     if [[ "$root_type" == *luks* ]]; then
         command -v cryptsetup >/dev/null || missing+=("cryptsetup")
     fi
