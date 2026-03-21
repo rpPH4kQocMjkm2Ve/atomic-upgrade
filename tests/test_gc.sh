@@ -34,6 +34,23 @@ assert_eq "list_generations oldest last"  "20250530-180000" "$last"
 assert_not_contains "non-arch files excluded" "something-else" "$result"
 
 
+# ── Empty directory: no glob artifacts ──
+ESP="${TESTDIR}/esp_nullglob"
+mkdir -p "${ESP}/EFI/Linux"
+
+result=$(list_generations)
+rc=$?
+assert_eq "empty dir → rc 0" "0" "$rc"
+assert_eq "empty dir → no output" "" "$result"
+
+# Verify nullglob did not leak into caller
+_ng_test=( /nonexistent_path_$$/no_such_* )
+assert_eq "nullglob not leaked to caller" "1" "${#_ng_test[@]}"
+
+# Restore ESP for subsequent tests
+ESP="${TESTDIR}/esp"
+
+
 # ── delete_generation ────────────────────────────────────────
 
 section "delete_generation"
@@ -74,6 +91,28 @@ delete_generation "20250602-090000" 0 "" >/dev/null 2>&1
 make_mock findmnt 'echo ""'
 run_cmd delete_generation "20250601-120000" 0 ""
 assert_eq "refuse when current unknown" "1" "$_rc"
+
+# ── Invalid gen_id format → rejected before any action ──
+run_cmd delete_generation "invalid" 0 "root-20250601-120000"
+assert_eq "rejects non-timestamp gen_id" "1" "$_rc"
+assert_contains "format error message" "Invalid generation ID format" "$_out"
+
+run_cmd delete_generation "../../etc" 0 "root-20250601-120000"
+assert_eq "rejects path traversal gen_id" "1" "$_rc"
+assert_contains "format error on traversal" "Invalid generation ID format" "$_out"
+
+run_cmd delete_generation "" 0 "root-20250601-120000"
+assert_eq "rejects empty gen_id" "1" "$_rc"
+
+run_cmd delete_generation "20250615" 0 "root-20250601-120000"
+assert_eq "rejects partial timestamp" "1" "$_rc"
+
+# Valid formats accepted (dry run)
+run_cmd delete_generation "20250615-120000" 1 "root-20250601-120000"
+assert_eq "accepts valid plain gen_id" "0" "$_rc"
+
+run_cmd delete_generation "20250615-120000-kde" 1 "root-20250601-120000"
+assert_eq "accepts valid tagged gen_id" "0" "$_rc"
 
 # Restore findmnt
 make_mock findmnt 'echo "rw,subvol=/root-20250601-120000"'

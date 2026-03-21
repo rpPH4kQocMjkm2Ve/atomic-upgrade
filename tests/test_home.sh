@@ -88,6 +88,15 @@ assert_eq "empty copy_files does not crash" "0" "$_rc"
 [[ -d "${_PHS_TARGET}/${_PHS_USER}" ]] \
     && ok "user dir created with empty copy_files" || fail "user dir not created"
 
+# Test: glob characters in copy_files treated literally (not expanded)
+rm -rf "${_PHS_TARGET:?}"/*
+# Verify noglob state is restored after the function call
+_phs_noglob_before=$(set +o | grep noglob)
+run_cmd _phs_test "$_PHS_TARGET" "*.conf [test]"
+_phs_noglob_after=$(set +o | grep noglob)
+assert_eq "noglob state restored after call" "$_phs_noglob_before" "$_phs_noglob_after"
+assert_eq "glob copy_files does not crash" "0" "$_rc"
+
 # Restore id mock
 make_mock id 'exit 1'
 
