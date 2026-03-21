@@ -148,10 +148,10 @@ make_mock btrfs      'exit 0'
 make_mock flock      'exit 0'
 make_mock df         'echo ""'
 
-# Prevent load_config from reading a real config at source time.
-# load_config() is called at line 74 of common.sh during source;
-# pointing to a nonexistent file makes it a harmless no-op.
-export CONFIG_FILE="${TESTDIR}/nonexistent.conf"
+# Skip auto-init; tests call load_config explicitly with controlled
+# CONFIG_FILE values.  This also avoids reading /etc/atomic.conf on
+# CI machines where the file may not exist or may not be root-owned.
+_ATOMIC_NO_INIT=1
 
 # Resolve project root (tests/ is one level below)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
