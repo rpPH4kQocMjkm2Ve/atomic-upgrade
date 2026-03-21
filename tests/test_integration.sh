@@ -274,7 +274,7 @@ assert_not_contains "no hint" "atomic-upgrade" "$_out"
 section "wrapper: -Syu blocked (non-interactive)"
 
 # stdin is not a terminal → wrapper aborts for safety
-run_cmd env CONFIG_FILE="${CONF_DIR}/guard_on.conf" bash "$WRAPPER" -Syu
+run_cmd env CONFIG_FILE="${CONF_DIR}/guard_on.conf" bash "$WRAPPER" -Syu < /dev/null
 assert_eq "-Syu non-interactive → exit 1" "1" "$_rc"
 assert_contains "shows hint" "atomic-upgrade" "$_out"
 assert_contains "non-interactive abort" "Non-interactive" "$_out"
@@ -283,7 +283,7 @@ assert_not_contains "pacman not called" "MOCK_PACMAN_CALLED" "$_out"
 
 section "wrapper: -Su blocked (sysupgrade without refresh)"
 
-run_cmd env CONFIG_FILE="${CONF_DIR}/guard_on.conf" bash "$WRAPPER" -Su
+run_cmd env CONFIG_FILE="${CONF_DIR}/guard_on.conf" bash "$WRAPPER" -Su < /dev/null
 assert_eq "-Su → exit 1" "1" "$_rc"
 assert_contains "-Su shows hint" "atomic-upgrade" "$_out"
 
@@ -291,14 +291,14 @@ assert_contains "-Su shows hint" "atomic-upgrade" "$_out"
 section "wrapper: --sync --sysupgrade blocked (long form)"
 
 run_cmd env CONFIG_FILE="${CONF_DIR}/guard_on.conf" \
-    bash "$WRAPPER" --sync --sysupgrade
+    bash "$WRAPPER" --sync --sysupgrade < /dev/null
 assert_eq "long form → exit 1" "1" "$_rc"
 assert_contains "long form shows hint" "atomic-upgrade" "$_out"
 
 
 section "wrapper: -Syyu blocked (double refresh)"
 
-run_cmd env CONFIG_FILE="${CONF_DIR}/guard_on.conf" bash "$WRAPPER" -Syyu
+run_cmd env CONFIG_FILE="${CONF_DIR}/guard_on.conf" bash "$WRAPPER" -Syyu < /dev/null
 assert_eq "-Syyu → exit 1" "1" "$_rc"
 assert_contains "-Syyu shows hint" "atomic-upgrade" "$_out"
 
@@ -340,7 +340,7 @@ assert_contains "reaches pacman" "MOCK_PACMAN_CALLED" "$_out"
 
 section "wrapper: common.sh load failure → safe default (blocks -Syu)"
 
-run_cmd bash "$WRAPPER_BROKEN" -Syu
+run_cmd bash "$WRAPPER_BROKEN" -Syu < /dev/null
 assert_eq "broken lib + -Syu → exit 1" "1" "$_rc"
 
 # Non-sysupgrade still passes through
@@ -378,7 +378,7 @@ run_cmd env CONFIG_FILE="${CONF_DIR}/guard_on.conf" LOCK_FILE="$TEST_LOCK" \
     bash "$GUARD"
 guard_rc=$_rc
 
-run_cmd env CONFIG_FILE="${CONF_DIR}/guard_on.conf" bash "$WRAPPER" -Syu
+run_cmd env CONFIG_FILE="${CONF_DIR}/guard_on.conf" bash "$WRAPPER" -Syu < /dev/null
 wrapper_rc=$_rc
 
 assert_eq "guard blocks" "1" "$guard_rc"
