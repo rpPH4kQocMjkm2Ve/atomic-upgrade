@@ -251,7 +251,7 @@ mount --bind "/var/cache/pacman" "${NEW_ROOT}/var/cache/pacman" || {
 }
 
 echo ":: Running: ${CHROOT_CMD[*]}"
-arch-chroot "$NEW_ROOT" "${CHROOT_CMD[@]}" || {
+chroot_snapshot "$NEW_ROOT" "${CHROOT_CMD[@]}" || {
     echo "ERROR: Command failed: ${CHROOT_CMD[*]}" >&2
     exit 1
 }

@@ -18,7 +18,7 @@ atomic-upgrade — atomic system upgrades for Arch Linux on Btrfs
 # DESCRIPTION
 
 **atomic-upgrade** creates a Btrfs snapshot of the current root subvolume,
-mounts it, runs a command inside an arch-chroot (default: **pacman -Syu**),
+mounts it, runs a command inside a chroot (default: **pacman -Syu**),
 updates *fstab*, builds a Unified Kernel Image (UKI), optionally signs it
 with **sbctl**(8), and runs garbage collection.
 
@@ -209,4 +209,4 @@ List subvolumes and UKI status:
 # SEE ALSO
 
 **atomic-gc**(8), **atomic.conf**(5), **btrfs-subvolume**(8), **ukify**(1),
-**sbctl**(8), **pacman**(8), **arch-chroot**(8)
+**sbctl**(8), **pacman**(8)

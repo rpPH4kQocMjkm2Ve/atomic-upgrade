@@ -110,7 +110,7 @@ validate_config() {
 
 check_dependencies() {
     local missing=()
-    for cmd in btrfs ukify findmnt arch-chroot python3; do
+    for cmd in btrfs ukify findmnt chroot unshare python3; do
         command -v "$cmd" >/dev/null || missing+=("$cmd")
     done
 
@@ -136,6 +136,70 @@ check_dependencies() {
             return 1
         }
     done
+}
+
+# ── Snapshot chroot (replaces arch-chroot dependency) ────────────
+
+chroot_snapshot() {
+    local root="$1"; shift
+    local rc=0
+    local resolv_link=""
+
+    mount -t sysfs sys "${root}/sys" -o nosuid,noexec,nodev,ro || return 1
+    if [[ -d "${root}/sys/firmware/efi/efivars" ]]; then
+        mount -t efivarfs efivarfs "${root}/sys/firmware/efi/efivars" \
+            -o nosuid,noexec,nodev 2>/dev/null || true
+    fi
+    mount -t devtmpfs udev "${root}/dev" -o mode=0755,nosuid || return 1
+    mount -t devpts devpts "${root}/dev/pts" \
+        -o mode=0620,gid=5,nosuid,noexec || return 1
+    mount -t tmpfs shm "${root}/dev/shm" -o mode=1777,nosuid,nodev || return 1
+    mount -t tmpfs run "${root}/run" -o nosuid,nodev,mode=0755 || return 1
+    mount -t tmpfs tmp "${root}/tmp" \
+        -o mode=1777,strictatime,nodev,nosuid || return 1
+
+    # Expose host lock directory for atomic-guard verification
+    if [[ -d "${LOCK_DIR}" ]]; then
+        mkdir -p "${root}${LOCK_DIR}"
+        mount --bind "${LOCK_DIR}" "${root}${LOCK_DIR}" || true
+    fi
+
+    # DNS — handle symlinks
+    local resolv_target="${root}/etc/resolv.conf"
+    if [[ -e /etc/resolv.conf ]]; then
+        if [[ -L "$resolv_target" ]]; then
+            resolv_link=$(readlink "$resolv_target")
+            rm -f "$resolv_target"
+            touch "$resolv_target"
+            mount --bind /etc/resolv.conf "$resolv_target" || true
+        elif [[ -e "$resolv_target" ]]; then
+            mount --bind /etc/resolv.conf "$resolv_target" || true
+        fi
+    fi
+
+    unshare --fork --pid --kill-child \
+        --mount --mount-proc="${root}/proc" \
+        chroot "${root}" \
+        /usr/bin/env SHELL=/bin/bash SYSTEMD_IN_CHROOT=1 ATOMIC_UPGRADE=1 \
+        "$@" || rc=$?
+
+    # Teardown — reverse order
+    umount "$resolv_target" 2>/dev/null
+    if [[ -n "$resolv_link" ]]; then
+        rm -f "$resolv_target"
+        ln -sf "$resolv_link" "$resolv_target"
+    fi
+    umount "${root}${LOCK_DIR}" 2>/dev/null
+    umount "${root}/tmp" 2>/dev/null
+    umount "${root}/run" 2>/dev/null
+    umount "${root}/dev/shm" 2>/dev/null
+    umount "${root}/dev/pts" 2>/dev/null
+    umount "${root}/dev" 2>/dev/null
+    umount "${root}/sys/firmware/efi/efivars" 2>/dev/null
+    umount "${root}/sys" 2>/dev/null
+    umount "${root}/proc" 2>/dev/null
+
+    return $rc
 }
 
 # ── Locking ─────────────────────────────────────────────────────────

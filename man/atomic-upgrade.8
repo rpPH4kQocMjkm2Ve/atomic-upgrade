@@ -13,7 +13,7 @@ atomic\-upgrade \[em] atomic system upgrades for Arch Linux on Btrfs
 \f[I]GEN_ID\f[R]
 .SH DESCRIPTION
 \f[B]atomic\-upgrade\f[R] creates a Btrfs snapshot of the current root
-subvolume, mounts it, runs a command inside an arch\-chroot (default:
+subvolume, mounts it, runs a command inside a chroot (default:
 \f[B]pacman \-Syu\f[R]), updates \f[I]fstab\f[R], builds a Unified
 Kernel Image (UKI), optionally signs it with \f[B]sbctl\f[R](8), and
 runs garbage collection.
@@ -235,4 +235,4 @@ sudo atomic\-rebuild\-uki \-\-list
 .SH SEE ALSO
 \f[B]atomic\-gc\f[R](8), \f[B]atomic.conf\f[R](5),
 \f[B]btrfs\-subvolume\f[R](8), \f[B]ukify\f[R](1), \f[B]sbctl\f[R](8),
-\f[B]pacman\f[R](8), \f[B]arch\-chroot\f[R](8)
+\f[B]pacman\f[R](8)

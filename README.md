@@ -13,7 +13,7 @@ NixOS/Silverblue-style generational updates on plain Arch: Btrfs snapshot → ch
 sudo atomic-upgrade
         ↓
   1. Btrfs snapshot of current root
-  2. Mount snapshot, arch-chroot into it
+  2. Mount snapshot, chroot into it
   3. Run command (default: pacman -Syu)
   4. Verify snapshot consistency (kernel, initramfs, modules)
   5. Update fstab (subvol=)
@@ -388,7 +388,6 @@ Installed automatically via the AUR package:
 - `btrfs-progs`
 - `systemd-ukify`
 - `python` ≥ 3.10
-- `arch-install-scripts` (provides `arch-chroot`)
 
 Optional:
 - `sbctl` — Secure Boot signing (enable with `SBCTL_SIGN=1`)

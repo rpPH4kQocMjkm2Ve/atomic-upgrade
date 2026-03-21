@@ -171,6 +171,7 @@ section "Function definitions"
 
 EXPECTED_FUNCTIONS=(
     load_config validate_config check_dependencies acquire_lock
+    chroot_snapshot
     is_child_of_aur_helper sign_uki verify_uki update_fstab
     update_fstab_home populate_home_skeleton
     get_current_subvol get_current_subvol_raw get_root_device
@@ -613,7 +614,7 @@ section "check_dependencies"
 # This tests that check_dependencies correctly reports it missing.
 _dep_bin="${TESTDIR}/dep_bin"
 mkdir -p "$_dep_bin"
-for cmd in ukify findmnt arch-chroot; do
+for cmd in ukify findmnt chroot unshare; do
     make_mock_in "$_dep_bin" "$cmd" 'exit 0'
 done
 # python3: return empty root type so cryptsetup isn't required
@@ -631,7 +632,7 @@ PATH="$_save_path"
 # ── check_dependencies: missing ukify ──
 _dep_bin2="${TESTDIR}/dep_bin2"
 mkdir -p "$_dep_bin2"
-for cmd in btrfs findmnt arch-chroot; do
+for cmd in btrfs findmnt chroot unshare; do
     make_mock_in "$_dep_bin2" "$cmd" 'exit 0'
 done
 # python3: return empty root type so cryptsetup isn't required
@@ -648,7 +649,7 @@ PATH="$_save_path"
 # ── check_dependencies: missing python3 ──
 _dep_bin3="${TESTDIR}/dep_bin3"
 mkdir -p "$_dep_bin3"
-for cmd in btrfs ukify findmnt arch-chroot; do
+for cmd in btrfs ukify findmnt chroot unshare; do
     make_mock_in "$_dep_bin3" "$cmd" 'exit 0'
 done
 # Omit python3
@@ -663,7 +664,7 @@ PATH="$_save_path"
 # ── check_dependencies: LUKS root requires cryptsetup ──
 _dep_bin4="${TESTDIR}/dep_bin4"
 mkdir -p "$_dep_bin4"
-for cmd in btrfs ukify findmnt arch-chroot; do
+for cmd in btrfs ukify findmnt chroot unshare; do
     make_mock_in "$_dep_bin4" "$cmd" 'exit 0'
 done
 # python3 mock: first call is "rootdev.py detect", second is "-c ..." JSON parser
@@ -689,7 +690,7 @@ PATH="$_save_path"
 # ── check_dependencies: all present → rc 0 ──
 _dep_bin5="${TESTDIR}/dep_bin5"
 mkdir -p "$_dep_bin5"
-for cmd in btrfs ukify findmnt arch-chroot; do
+for cmd in btrfs ukify findmnt chroot unshare; do
     make_mock_in "$_dep_bin5" "$cmd" 'exit 0'
 done
 make_mock_in "$_dep_bin5" python3 'echo ""'
@@ -703,7 +704,7 @@ PATH="$_save_path"
 # ── check_dependencies: SBCTL_SIGN=1 requires sbctl ──
 _dep_bin6="${TESTDIR}/dep_bin6"
 mkdir -p "$_dep_bin6"
-for cmd in btrfs ukify findmnt arch-chroot; do
+for cmd in btrfs ukify findmnt chroot unshare; do
     make_mock_in "$_dep_bin6" "$cmd" 'exit 0'
 done
 make_mock_in "$_dep_bin6" python3 'echo ""'
@@ -1062,6 +1063,170 @@ assert_contains "gc still completes" "done" "$_out"
 # Restore mountpoint mock
 make_mock mountpoint 'exit 0'
 
+# ── chroot_snapshot ───────────────────────────────────────────
+
+section "chroot_snapshot"
+
+_CS_ROOT="${TESTDIR}/cs_root"
+_CS_LOG="${TESTDIR}/cs_unshare_log"
+
+_cs_setup() {
+    rm -rf "$_CS_ROOT" "$_CS_LOG"
+    mkdir -p "${_CS_ROOT}/proc" "${_CS_ROOT}/sys/firmware/efi/efivars"
+    mkdir -p "${_CS_ROOT}/dev/pts" "${_CS_ROOT}/dev/shm"
+    mkdir -p "${_CS_ROOT}/run" "${_CS_ROOT}/tmp" "${_CS_ROOT}/etc"
+}
+
+make_mock umount 'exit 0'
+
+# ── Happy path: rc 0 + correct unshare flags ──
+_cs_setup
+LOCK_DIR="${TESTDIR}/cs_lock"
+mkdir -p "$LOCK_DIR"
+make_mock mount   'exit 0'
+make_mock unshare 'echo "$*" > "'"${_CS_LOG}"'"; exit 0'
+
+run_cmd chroot_snapshot "$_CS_ROOT" /usr/bin/pacman -Syu
+assert_eq "happy path → rc 0" "0" "$_rc"
+
+_cs_args=$(cat "$_CS_LOG" 2>/dev/null || echo "")
+assert_contains "uses --fork"          "--fork"        "$_cs_args"
+assert_contains "uses --pid"           "--pid"         "$_cs_args"
+assert_contains "uses --kill-child"    "--kill-child"  "$_cs_args"
+assert_contains "uses --mount"         "--mount "      "$_cs_args"
+assert_contains "uses --mount-proc"    "--mount-proc=${_CS_ROOT}/proc" "$_cs_args"
+assert_contains "chroots into root"    "chroot ${_CS_ROOT}" "$_cs_args"
+assert_contains "passes ATOMIC_UPGRADE"    "ATOMIC_UPGRADE=1"    "$_cs_args"
+assert_contains "passes SYSTEMD_IN_CHROOT" "SYSTEMD_IN_CHROOT=1" "$_cs_args"
+assert_contains "passes SHELL"             "SHELL=/bin/bash"      "$_cs_args"
+assert_contains "forwards command"     "/usr/bin/pacman" "$_cs_args"
+assert_contains "forwards args"        "-Syu"           "$_cs_args"
+
+# ── Command failure → rc propagated ──
+_cs_setup
+LOCK_DIR="${TESTDIR}/cs_lock"
+make_mock mount   'exit 0'
+make_mock unshare 'exit 42'
+
+run_cmd chroot_snapshot "$_CS_ROOT" /bin/false
+assert_eq "command failure → rc propagated" "42" "$_rc"
+
+# ── Multiple arguments forwarded ──
+_cs_setup
+LOCK_DIR="${TESTDIR}/cs_lock"
+make_mock mount   'exit 0'
+make_mock unshare 'echo "$*" > "'"${_CS_LOG}"'"; exit 0'
+
+run_cmd chroot_snapshot "$_CS_ROOT" /usr/bin/pacman -S --needed base-devel git
+_cs_args=$(cat "$_CS_LOG" 2>/dev/null || echo "")
+assert_contains "multi-arg: -S"         "-S"         "$_cs_args"
+assert_contains "multi-arg: --needed"   "--needed"   "$_cs_args"
+assert_contains "multi-arg: base-devel" "base-devel" "$_cs_args"
+assert_contains "multi-arg: git"        "git"        "$_cs_args"
+
+# ── LOCK_DIR exposed inside root ──
+_cs_setup
+LOCK_DIR="${TESTDIR}/cs_lock_expose"
+mkdir -p "$LOCK_DIR"
+make_mock mount   'exit 0'
+make_mock unshare 'exit 0'
+
+run_cmd chroot_snapshot "$_CS_ROOT" /bin/true
+[[ -d "${_CS_ROOT}${LOCK_DIR}" ]] \
+    && ok "LOCK_DIR created inside root" \
+    || fail "LOCK_DIR not created inside root"
+
+# ── LOCK_DIR missing on host → no crash ──
+_cs_setup
+LOCK_DIR="${TESTDIR}/cs_lock_nonexistent_$$"
+make_mock mount   'exit 0'
+make_mock unshare 'exit 0'
+
+run_cmd chroot_snapshot "$_CS_ROOT" /bin/true
+assert_eq "missing LOCK_DIR → no crash" "0" "$_rc"
+
+# ── resolv.conf symlink: saved and restored ──
+_cs_setup
+LOCK_DIR="${TESTDIR}/cs_lock"
+make_mock mount   'exit 0'
+make_mock unshare 'exit 0'
+
+ln -sf "../run/systemd/resolve/stub-resolv.conf" "${_CS_ROOT}/etc/resolv.conf"
+_orig_target=$(readlink "${_CS_ROOT}/etc/resolv.conf")
+
+run_cmd chroot_snapshot "$_CS_ROOT" /bin/true
+[[ -L "${_CS_ROOT}/etc/resolv.conf" ]] \
+    && ok "resolv.conf symlink restored" \
+    || fail "resolv.conf not a symlink after teardown"
+_restored=$(readlink "${_CS_ROOT}/etc/resolv.conf" 2>/dev/null || echo "")
+assert_eq "resolv.conf link target matches" "$_orig_target" "$_restored"
+
+# ── resolv.conf regular file: not mangled ──
+_cs_setup
+LOCK_DIR="${TESTDIR}/cs_lock"
+make_mock mount   'exit 0'
+make_mock unshare 'exit 0'
+
+echo "nameserver 1.1.1.1" > "${_CS_ROOT}/etc/resolv.conf"
+
+run_cmd chroot_snapshot "$_CS_ROOT" /bin/true
+[[ -f "${_CS_ROOT}/etc/resolv.conf" && ! -L "${_CS_ROOT}/etc/resolv.conf" ]] \
+    && ok "resolv.conf regular file preserved" \
+    || fail "resolv.conf regular file lost or became symlink"
+
+# ── No resolv.conf in root: no crash ──
+_cs_setup
+LOCK_DIR="${TESTDIR}/cs_lock"
+make_mock mount   'exit 0'
+make_mock unshare 'exit 0'
+rm -f "${_CS_ROOT}/etc/resolv.conf"
+
+run_cmd chroot_snapshot "$_CS_ROOT" /bin/true
+assert_eq "no resolv.conf → no crash" "0" "$_rc"
+
+# ── resolv.conf symlink still restored after command failure ──
+_cs_setup
+LOCK_DIR="${TESTDIR}/cs_lock"
+make_mock mount   'exit 0'
+make_mock unshare 'exit 1'
+
+ln -sf "../run/systemd/resolve/stub-resolv.conf" "${_CS_ROOT}/etc/resolv.conf"
+
+run_cmd chroot_snapshot "$_CS_ROOT" /bin/true
+[[ -L "${_CS_ROOT}/etc/resolv.conf" ]] \
+    && ok "symlink restored even after failure" \
+    || fail "symlink not restored after failure"
+
+# ── Mount failure → early return, unshare not called ──
+_cs_setup
+LOCK_DIR="${TESTDIR}/cs_lock"
+make_mock mount   'exit 1'
+make_mock unshare 'echo "SHOULD_NOT_RUN" > "'"${_CS_LOG}"'"; exit 0'
+
+run_cmd chroot_snapshot "$_CS_ROOT" /bin/true
+assert_eq "mount failure → rc 1" "1" "$_rc"
+_cs_ran=$(cat "$_CS_LOG" 2>/dev/null || echo "")
+assert_not_contains "unshare not called on mount failure" "SHOULD_NOT_RUN" "$_cs_ran"
+
+# ── efivarfs failure does not abort (|| true) ──
+_cs_setup
+LOCK_DIR="${TESTDIR}/cs_lock"
+make_mock unshare 'exit 0'
+make_mock mount '
+if echo "$*" | grep -q "efivarfs"; then
+    exit 1
+fi
+exit 0
+'
+
+run_cmd chroot_snapshot "$_CS_ROOT" /bin/true
+assert_eq "efivarfs failure ignored → rc 0" "0" "$_rc"
+
+# Restore mocks for subsequent tests
+make_mock mount      'exit 0'
+make_mock umount     'exit 0'
+make_mock mountpoint 'exit 0'
+LOCK_DIR="/run/atomic"
 
 # ── is_child_of_aur_helper ──────────────────────────────────
 
