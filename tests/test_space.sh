@@ -69,6 +69,36 @@ run_cmd check_btrfs_space "${TESTDIR}" 10
 assert_eq "cannot determine → rc 0 (warn)" "0" "$_rc"
 assert_contains "warning message" "Cannot determine" "$_out"
 
+# ── Non-numeric btrfs output → df fallback ──
+make_mock btrfs '
+if echo "$*" | grep -q "usage"; then
+    echo "    Device size:                 unknown"
+    echo "    Free (estimated):            N/A"
+fi
+'
+make_mock df '
+if echo "$*" | grep -q -- "-B1"; then
+    echo "     Size     Avail"
+    echo "107374182400 53687091200"
+else
+    echo ""
+fi
+'
+run_cmd check_btrfs_space "${TESTDIR}" 10
+assert_eq "non-numeric btrfs → df fallback → rc 0" "0" "$_rc"
+assert_contains "reports space from df" "Disk space" "$_out"
+
+# ── Empty btrfs output + empty df → graceful warn ──
+make_mock btrfs '
+if echo "$*" | grep -q "usage"; then
+    echo ""
+fi
+'
+make_mock df 'echo ""'
+run_cmd check_btrfs_space "${TESTDIR}" 10
+assert_eq "empty btrfs + empty df → rc 0 (warn)" "0" "$_rc"
+assert_contains "warns about indeterminate space" "Cannot determine" "$_out"
+
 # Restore
 make_mock btrfs 'exit 0'
 make_mock df    'echo -e "Avail\n512000"'

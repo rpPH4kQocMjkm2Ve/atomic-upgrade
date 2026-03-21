@@ -164,6 +164,49 @@ exit 0
 run_cmd chroot_snapshot "$_CS_ROOT" /bin/true
 assert_eq "efivarfs failure ignored → rc 0" "0" "$_rc"
 
+# ── Mount failure mid-chain → earlier mounts cleaned up ──
+_cs_setup
+LOCK_DIR="${TESTDIR}/cs_lock"
+mkdir -p "$LOCK_DIR"
+
+_CS_UMOUNT_LOG="${TESTDIR}/cs_umount_cleanup.log"
+: > "$_CS_UMOUNT_LOG"
+
+make_mock umount 'echo "$*" >> "'"${_CS_UMOUNT_LOG}"'"; exit 0'
+make_mock unshare 'echo "SHOULD_NOT_RUN" > "'"${_CS_LOG}"'"; exit 0'
+
+# devtmpfs fails → sysfs already mounted, must be cleaned up
+make_mock mount '
+if echo "$*" | grep -q "devtmpfs"; then exit 1; fi
+exit 0
+'
+
+run_cmd chroot_snapshot "$_CS_ROOT" /bin/true
+assert_eq "devtmpfs failure → rc 1" "1" "$_rc"
+_cs_ran=$(cat "$_CS_LOG" 2>/dev/null || echo "")
+assert_not_contains "unshare not called on devtmpfs failure" "SHOULD_NOT_RUN" "$_cs_ran"
+
+_cs_umount_out=$(cat "$_CS_UMOUNT_LOG")
+assert_contains "sysfs cleaned up after devtmpfs failure" "/sys" "$_cs_umount_out"
+
+# run tmpfs fails → dev, devpts, sysfs must be cleaned up
+: > "$_CS_UMOUNT_LOG"
+: > "$_CS_LOG"
+
+make_mock mount '
+if echo "$*" | grep -q "nosuid,nodev,mode=0755" && echo "$*" | grep -q "/run"; then exit 1; fi
+exit 0
+'
+
+run_cmd chroot_snapshot "$_CS_ROOT" /bin/true
+assert_eq "run tmpfs failure → rc 1" "1" "$_rc"
+_cs_ran=$(cat "$_CS_LOG" 2>/dev/null || echo "")
+assert_not_contains "unshare not called on run failure" "SHOULD_NOT_RUN" "$_cs_ran"
+
+_cs_umount_out=$(cat "$_CS_UMOUNT_LOG")
+assert_contains "dev cleaned up after run failure" "/dev" "$_cs_umount_out"
+assert_contains "sys cleaned up after run failure" "/sys" "$_cs_umount_out"
+
 # Restore mocks
 make_mock mount      'exit 0'
 make_mock umount     'exit 0'
