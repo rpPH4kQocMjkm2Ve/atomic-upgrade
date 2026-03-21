@@ -11,6 +11,18 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'lib', 'atomic'))
 from rootdev import run, detect_root, _detect_dm_type, build_cmdline, main
 
+def _mock_run(responses):
+    """Return a side_effect function that maps command tuples to outputs.
+
+    Args:
+        responses: list of (cmd_tuple, return_value) pairs
+    """
+    def fake(*cmd):
+        for key, val in responses:
+            if cmd == key:
+                return val
+        return ""
+    return fake
 
 # ─── run() ───────────────────────────────────────────────────────────────────
 
@@ -55,7 +67,7 @@ FINDMNT_PLAIN = json.dumps({
 
 
 class TestDetectRootPlain:
-    def _mock_run(self, responses):
+    def test_plain_btrfs(self):
         """Return a side_effect function that maps command tuples to outputs."""
         def fake(*cmd):
             for key, val in responses:
@@ -69,7 +81,7 @@ class TestDetectRootPlain:
             (("findmnt", "-n", "-J", "-o", "SOURCE,FSTYPE,OPTIONS", "/"), FINDMNT_PLAIN),
             (("blkid", "-s", "UUID", "-o", "value", "/dev/sda2"), "aaaa-bbbb-cccc"),
         ]
-        with patch("rootdev.run", side_effect=self._mock_run(responses)):
+        with patch("rootdev.run", side_effect=_mock_run(responses)):
             info = detect_root()
         assert info["source"] == "/dev/sda2"
         assert info["fstype"] == "btrfs"
@@ -84,7 +96,7 @@ class TestDetectRootPlain:
             (("findmnt", "-n", "-J", "-o", "SOURCE,FSTYPE,OPTIONS", "/"), FINDMNT_PLAIN),
             (("blkid", "-s", "UUID", "-o", "value", "/dev/sda2"), ""),
         ]
-        with patch("rootdev.run", side_effect=self._mock_run(responses)):
+        with patch("rootdev.run", side_effect=_mock_run(responses)):
             info = detect_root()
         assert info["root_arg"] == "/dev/sda2"
 
@@ -112,7 +124,7 @@ class TestDetectRootPlain:
             (("findmnt", "-n", "-J", "-o", "SOURCE,FSTYPE,OPTIONS", "/"), data),
             (("blkid", "-s", "UUID", "-o", "value", "/dev/sda2"), "some-uuid"),
         ]
-        with patch("rootdev.run", side_effect=self._mock_run(responses)):
+        with patch("rootdev.run", side_effect=_mock_run(responses)):
             info = detect_root()
         assert info["source"] == "/dev/sda2"
 
@@ -128,7 +140,7 @@ class TestDetectRootPlain:
             (("findmnt", "-n", "-J", "-o", "SOURCE,FSTYPE,OPTIONS", "/"), data),
             (("blkid", "-s", "UUID", "-o", "value", "/dev/sda2"), "ext4-uuid"),
         ]
-        with patch("rootdev.run", side_effect=self._mock_run(responses)):
+        with patch("rootdev.run", side_effect=_mock_run(responses)):
             info = detect_root()
         assert info["subvol"] is None
         assert info["fstype"] == "ext4"
@@ -155,7 +167,7 @@ CRYPTSETUP_STATUS = """\
 
 
 class TestDetectRootLuks:
-    def _mock_run(self, responses):
+    def test_luks(self):
         def fake(*cmd):
             for key, val in responses:
                 if cmd == key:
@@ -170,7 +182,7 @@ class TestDetectRootLuks:
             (("cryptsetup", "status", "root_crypt"), CRYPTSETUP_STATUS),
             (("blkid", "-s", "UUID", "-o", "value", "/dev/nvme0n1p2"), "luks-uuid-1234"),
         ]
-        with patch("rootdev.run", side_effect=self._mock_run(responses)):
+        with patch("rootdev.run", side_effect=_mock_run(responses)):
             info = detect_root()
         assert info["type"] == "luks"
         assert info["luks_name"] == "root_crypt"
@@ -185,7 +197,7 @@ class TestDetectRootLuks:
             (("cryptsetup", "status", "root_crypt"), CRYPTSETUP_STATUS),
             (("blkid", "-s", "UUID", "-o", "value", "/dev/nvme0n1p2"), ""),
         ]
-        with patch("rootdev.run", side_effect=self._mock_run(responses)):
+        with patch("rootdev.run", side_effect=_mock_run(responses)):
             info = detect_root()
         assert info["type"] == "luks"
         assert info["luks_uuid"] is None
@@ -203,7 +215,7 @@ FINDMNT_LVM = json.dumps({
 
 
 class TestDetectRootLvm:
-    def _mock_run(self, responses):
+    def test_lvm_plain(self):
         def fake(*cmd):
             for key, val in responses:
                 if cmd == key:
@@ -218,7 +230,7 @@ class TestDetectRootLvm:
             (("lvs", "--noheadings", "-o", "vg_name,lv_name", "/dev/mapper/vg0-root"), "  vg0  root"),
             (("pvs", "--noheadings", "-o", "pv_name", "-S", "vg_name=vg0"), "  /dev/sda2"),
         ]
-        with patch("rootdev.run", side_effect=self._mock_run(responses)):
+        with patch("rootdev.run", side_effect=_mock_run(responses)):
             info = detect_root()
         assert info["type"] == "lvm"
         assert info["root_arg"] == "/dev/mapper/vg0-root"
@@ -234,7 +246,7 @@ class TestDetectRootLvm:
             (("cryptsetup", "status", "crypt_pv"), "  device:  /dev/sda3"),
             (("blkid", "-s", "UUID", "-o", "value", "/dev/sda3"), "luks-pv-uuid"),
         ]
-        with patch("rootdev.run", side_effect=self._mock_run(responses)):
+        with patch("rootdev.run", side_effect=_mock_run(responses)):
             info = detect_root()
         assert info["type"] == "luks+lvm"
         assert info["luks_name"] == "crypt_pv"
