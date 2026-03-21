@@ -439,7 +439,9 @@ check_btrfs_space() {
         awk '/Device size/ {gsub(/[^0-9]/,"",$3); print $3}')
 
     # Fallback to df if btrfs output parsing failed
-    if [[ -z "$free_bytes" || -z "$total_bytes" || "$total_bytes" -eq 0 ]] 2>/dev/null; then
+    if [[ -z "$free_bytes" || -z "$total_bytes" || \
+          ! "$free_bytes" =~ ^[0-9]+$ || ! "$total_bytes" =~ ^[0-9]+$ || \
+          "$total_bytes" -eq 0 ]]; then
         local df_line
         df_line=$(df -B1 --output=size,avail "$mount_point" 2>/dev/null | tail -1)
         if [[ -n "$df_line" ]]; then
@@ -447,7 +449,9 @@ check_btrfs_space() {
         fi
     fi
 
-    if [[ -z "$free_bytes" || -z "$total_bytes" ]] 2>/dev/null || [[ "$total_bytes" -eq 0 ]] 2>/dev/null; then
+    if [[ -z "$free_bytes" || -z "$total_bytes" || \
+          ! "$free_bytes" =~ ^[0-9]+$ || ! "$total_bytes" =~ ^[0-9]+$ || \
+          "$total_bytes" -eq 0 ]]; then
         echo "WARN: Cannot determine disk space, continuing anyway" >&2
         return 0
     fi
