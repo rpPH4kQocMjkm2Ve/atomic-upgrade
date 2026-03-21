@@ -18,6 +18,12 @@ Inline comments are supported when preceded by a space (e.g.,
 Values may optionally be enclosed in single or double quotes, which are
 stripped during parsing.
 .PP
+\f[B]Note:\f[R] inline comment detection splits on the first
+\f[CR]#\f[R] (space + hash) occurrence.
+Values containing a literal \f[CR]#\f[R] sequence will be truncated at
+that point.
+This does not affect typical paths or kernel parameters.
+.PP
 Only whitelisted keys are accepted.
 Unknown keys produce a warning on stderr and are ignored.
 The file must be owned by root (uid 0); otherwise it is rejected

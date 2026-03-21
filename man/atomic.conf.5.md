@@ -24,6 +24,10 @@ Inline comments are supported when preceded by a space (e.g.,
 **KEEP_GENERATIONS=3 # keep three**). Values may optionally be enclosed in
 single or double quotes, which are stripped during parsing.
 
+**Note:** inline comment detection splits on the first ` #` (space + hash)
+occurrence. Values containing a literal ` #` sequence will be truncated at
+that point. This does not affect typical paths or kernel parameters.
+
 Only whitelisted keys are accepted. Unknown keys produce a warning on stderr
 and are ignored. The file must be owned by root (uid 0); otherwise it is
 rejected entirely.

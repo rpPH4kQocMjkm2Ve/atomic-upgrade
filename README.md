@@ -162,6 +162,10 @@ Edit `/etc/atomic.conf`:
 | `UPGRADE_GUARD` | `1` | Upgrade guard: block direct `pacman -Syu` (`0`=off, `1`=on) |
 | `HOME_COPY_FILES` | *(empty)* | Files to copy into isolated home subvolumes (see [Home isolation](#home-isolation)) |
 
+> **Config syntax:** inline comments start at ` #` (space then hash).
+> Values containing a literal ` #` sequence will be truncated. This does not
+> affect typical paths or kernel parameters.
+
 Default `KERNEL_PARAMS`: `rw slab_nomerge init_on_alloc=1 page_alloc.shuffle=1 pti=on vsyscall=none randomize_kstack_offset=on debugfs=off`
 
 Root device is auto-detected (LUKS, LVM, LUKS+LVM, plain Btrfs). `MAPPER_NAME` is only used as a fallback if auto-detection fails.
