@@ -17,7 +17,8 @@ if _p=$(verify-lib "${LIBDIR}/common.sh" "$LIBDIR/" 2>/dev/null) && [[ -n "$_p" 
     fi
 fi
 
-LOCK_FILE="${LOCK_FILE:-/run/atomic/atomic-upgrade.lock}"
+LOCK_DIR="${LOCK_DIR:-/run/atomic}"
+LOCK_FILE="${LOCK_FILE:-${LOCK_DIR}/atomic-upgrade.lock}"
 
 # If guard is disabled in config, allow everything
 if [[ "${UPGRADE_GUARD:-1}" == "0" ]]; then

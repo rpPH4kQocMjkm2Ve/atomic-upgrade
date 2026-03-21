@@ -12,7 +12,8 @@ ESP="/efi"
 KEEP_GENERATIONS=3
 MAPPER_NAME="root_crypt"
 KERNEL_PKG="linux"
-LOCK_FILE="${LOCK_FILE:-/run/atomic/atomic-upgrade.lock}"
+LOCK_DIR="/run/atomic"
+LOCK_FILE="${LOCK_FILE:-${LOCK_DIR}/atomic-upgrade.lock}"
 SBCTL_SIGN=0
 UPGRADE_GUARD=1
 # Files to copy from /home/<user>/ into isolated homes (space-separated)
@@ -131,9 +132,7 @@ check_dependencies() {
 # ── Locking ─────────────────────────────────────────────────────────
 
 acquire_lock() {
-    local lock_dir
-    lock_dir=$(dirname "$LOCK_FILE")
-    [[ -d "$lock_dir" ]] || mkdir -p "$lock_dir"
+    [[ -d "$LOCK_DIR" ]] || mkdir -p "$LOCK_DIR"
 
     exec {LOCK_FD}>"$LOCK_FILE"
     if ! flock -n "$LOCK_FD"; then
