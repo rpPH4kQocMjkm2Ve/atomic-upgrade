@@ -1,4 +1,4 @@
-.PHONY: install uninstall reinstall install-conf man clean
+.PHONY: install uninstall reinstall install-conf man clean test
 
 PREFIX     = /usr
 SYSCONFDIR = /etc
@@ -27,6 +27,12 @@ man/%.5: man/%.5.md
 
 clean:
 	rm -f $(MANPAGES)
+
+test:
+	bash tests/test_common.sh
+	bash tests/test_integration.sh
+	python -m pytest tests/test_fstab.py -v
+	python -m pytest tests/test_rootdev.py -v
 
 install:
 	install -Dm755 bin/atomic-upgrade     $(DESTDIR)$(BINDIR)/atomic-upgrade

@@ -326,7 +326,13 @@ If the ESP is not mounted during the orphan sweep phase, it is skipped with a wa
 | `fstab.py` | Safe fstab editing (atomic write + verification + rollback) |
 | `rootdev.py` | Auto-detect root device type (LUKS/LVM/plain) and build kernel cmdline |
 | `pacman-wrapper` | Optional `/usr/local/bin/pacman` wrapper |
+| `atomic.conf` | Default config file — all options commented out, installed to `/etc/atomic.conf` |
+| `00-block-direct-upgrade.hook` | Pacman pre-transaction hook — invokes `atomic-guard` to block direct `-Syu` |
 | `completions/` | Zsh and bash tab completions for `atomic-gc`, `atomic-rebuild-uki`, and `atomic-upgrade` |
+| `tests/test_common.sh` | Unit tests for `common.sh` — config parsing, locking, subvol detection, space checks, GC logic |
+| `tests/test_integration.sh` | Integration tests — guard and wrapper behavior with real config parsing and lock mechanics |
+| `tests/test_fstab.py` | Unit tests for `fstab.py` — entry parsing, subvol replacement, atomic write, rollback |
+| `tests/test_rootdev.py` | Unit tests for `rootdev.py` — device detection (plain/LUKS/LVM), cmdline generation, CLI |
 
 ## Troubleshooting
 
