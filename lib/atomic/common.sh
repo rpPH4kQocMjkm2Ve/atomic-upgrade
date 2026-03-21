@@ -300,6 +300,10 @@ populate_home_skeleton() {
 
         if [[ -n "$copy_files" ]]; then
             local file_rel
+            # Disable globbing to prevent pattern expansion in unquoted $copy_files
+            local _restore_glob
+            _restore_glob=$(shopt -po noglob 2>/dev/null) || _restore_glob="set +o noglob"
+            set -f
             for file_rel in $copy_files; do
                 # Sanitize: no absolute paths, no path traversal
                 case "$file_rel" in
@@ -327,6 +331,7 @@ populate_home_skeleton() {
                     }
                 fi
             done
+            eval "$_restore_glob"
         fi
     done
 
