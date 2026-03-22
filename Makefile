@@ -81,6 +81,7 @@ install:
 	install -Dm644 man/atomic-upgrade.8 $(DESTDIR)$(MANDIR)/man8/atomic-upgrade.8
 	install -Dm644 man/atomic-gc.8      $(DESTDIR)$(MANDIR)/man8/atomic-gc.8
 	install -Dm644 man/atomic.conf.5    $(DESTDIR)$(MANDIR)/man5/atomic.conf.5
+	ln -sf atomic-upgrade.8 $(DESTDIR)$(MANDIR)/man8/atomic-rebuild-uki.8
 
 	install -Dm644 LICENSE $(DESTDIR)$(LICENSEDIR)/LICENSE
 
@@ -107,6 +108,7 @@ uninstall:
 	rm -f  $(DESTDIR)$(PREFIX)/local/bin/pacman
 	rm -f  $(DESTDIR)$(MANDIR)/man8/atomic-upgrade.8
 	rm -f  $(DESTDIR)$(MANDIR)/man8/atomic-gc.8
+	rm -f  $(DESTDIR)$(MANDIR)/man8/atomic-rebuild-uki.8
 	rm -f  $(DESTDIR)$(MANDIR)/man5/atomic.conf.5
 	rm -rf $(DESTDIR)$(LICENSEDIR)/
 	@echo "Note: $(SYSCONFDIR)/atomic.conf preserved. Remove manually if needed."

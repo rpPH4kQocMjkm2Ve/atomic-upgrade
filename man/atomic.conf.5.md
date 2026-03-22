@@ -15,8 +15,9 @@ atomic.conf — configuration file for atomic-upgrade
 
 # DESCRIPTION
 
-**atomic.conf** is the configuration file for **atomic-upgrade**(8) and
-**atomic-gc**(8). It is read on every invocation. Changes take effect
+**atomic.conf** is the configuration file for **atomic-upgrade**(8),
+**atomic-gc**(8), **atomic-rebuild-uki**, **atomic-guard**, and the
+pacman wrapper. It is read on every invocation. Changes take effect
 immediately without restarting any service.
 
 The file format is *KEY=VALUE*, one per line. Comments begin with **#**.

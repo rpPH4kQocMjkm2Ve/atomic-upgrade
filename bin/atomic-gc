@@ -15,7 +15,7 @@ atomic-gc - Manage generations
 Usage:
     atomic-gc [OPTIONS] [COUNT]    Garbage collect (keep COUNT, default: $KEEP_GENERATIONS)
     atomic-gc list                 List all generations
-    atomic-gc rm GEN_ID [GEN_ID ...]      Delete specific generation(s)
+    atomic-gc rm [OPTIONS] GEN_ID [GEN_ID ...]  Delete specific generation(s)
 
 Options:
     -n, --dry-run    Show what would be done

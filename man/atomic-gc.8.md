@@ -15,7 +15,7 @@ atomic-gc — manage atomic-upgrade generations
 
 **atomic-gc** **list**
 
-**atomic-gc** **rm** [**-y**|**\--yes**] *GEN_ID* [*GEN_ID*...]
+**atomic-gc** **rm** [**-n**|**\--dry-run**] [**-y**|**\--yes**] *GEN_ID* [*GEN_ID*...]
 
 # DESCRIPTION
 
