@@ -8,14 +8,17 @@ source "$(dirname "${BASH_SOURCE[0]}")/test_harness.sh"
 
 SCRIPT="${PROJECT_ROOT}/bin/atomic-rebuild-uki"
 
-make_mock verify-lib 'echo "$1"; exit 0'
+# The script hardcodes /usr/lib/atomic, which doesn't exist in CI.
+# Point verify-lib to the actual common.sh in the project tree
+# so that the subsequent 'source' call succeeds.
+make_mock verify-lib "echo '${PROJECT_ROOT}/lib/atomic/common.sh'; exit 0"
 
 # ── Help flag ───────────────────────────────────────────────
 
 section "Help flag"
 
-# The script exits 0 on --help, so we test in subshell
-run_cmd bash "$SCRIPT" --help
+# Bypass config loading to avoid environment-dependent failures
+run_cmd env _ATOMIC_NO_INIT=1 bash "$SCRIPT" --help
 assert_contains "help shows usage" "Usage:" "$_out"
 assert_contains "help shows --list" "--list" "$_out"
 assert_contains "help shows GEN_ID" "GEN_ID" "$_out"
