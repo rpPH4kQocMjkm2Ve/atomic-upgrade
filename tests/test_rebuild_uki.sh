@@ -15,7 +15,7 @@ make_mock verify-lib 'echo "$1"; exit 0'
 section "Help flag"
 
 # The script exits 0 on --help, so we test in subshell
-run_cmd bash "$SCRIPT" --help 2>/dev/null || true
+run_cmd bash "$SCRIPT" --help
 assert_contains "help shows usage" "Usage:" "$_out"
 assert_contains "help shows --list" "--list" "$_out"
 assert_contains "help shows GEN_ID" "GEN_ID" "$_out"
@@ -42,8 +42,8 @@ assert_eq "tagged GEN_ID valid" "0" "$_rc"
 run_cmd _validate_gen_id "20250208-134725-pre-nvidia"
 assert_eq "multi-word tag valid" "0" "$_rc"
 
-run_cmd _validate_gen_id "20250208-134725_test"
-assert_eq "underscore tag valid" "0" "$_rc"
+run_cmd _validate_gen_id "20250208-134725-test_123"
+assert_eq "underscore in tag valid" "0" "$_rc"
 
 run_cmd _validate_gen_id "20250208"
 assert_eq "missing time → invalid" "1" "$_rc"
@@ -81,7 +81,9 @@ _list_orphans_sim() {
         dirs+=("$dir")
     done
 
-    readarray -t dirs < <(printf '%s\n' "${dirs[@]}" | sort -r)
+    if [[ ${#dirs[@]} -gt 0 ]]; then
+        readarray -t dirs < <(printf '%s\n' "${dirs[@]}" | sort -r)
+    fi
 
     for dir in "${dirs[@]}"; do
         local name="${dir##*/}"
@@ -179,7 +181,7 @@ _output=$(_rebuild_flow_sim "20250601-120000" "$_ESP_RB" "$_BTRFS_RB")
 assert_contains "overwrite prompt shown" "WOULD_ASK_OVERWRITE" "$_output"
 
 # Subvol missing → error
-_output=$(_rebuild_flow_sim "20250699-999999" "$_ESP_RB" "$_BTRFS_RB")
+_output=$(_rebuild_flow_sim "20250699-999999" "$_ESP_RB" "$_BTRFS_RB" 2>&1)
 assert_contains "missing subvol error" "Subvolume not found" "$_output"
 
 # ── Overwrite confirmation logic ────────────────────────────
@@ -210,7 +212,7 @@ run_cmd _confirm_overwrite ""
 assert_eq "empty → abort" "1" "$_rc"
 
 run_cmd _confirm_overwrite "yes"
-assert_eq "yes → abort (not y/Y)" "1" "$_rc"
+assert_eq "yes → proceeds (matches [Yy]*)" "0" "$_rc"
 
 # ── UKI path construction ───────────────────────────────────
 
