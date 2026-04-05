@@ -6,7 +6,9 @@
 
 # ── Library directory ──────────────────────────────────────────────
 
-LIBDIR="${LIBDIR:-/usr/lib/atomic}"
+if [[ -z "${LIBDIR:-}" ]]; then
+    LIBDIR="/usr/lib/atomic"
+fi
 
 # ── Defaults (overridable via /etc/atomic.conf) ─────────────────────
 BTRFS_MOUNT="/run/atomic/temp_root"
