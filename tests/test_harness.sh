@@ -194,6 +194,7 @@ ENDSCRIPT
 # Call this between test sections to prevent state leakage.
 
 reset_atomic_globals() {
+    LIBDIR="/usr/lib/atomic"
     _ROOT_DEVICE=""
     KEEP_GENERATIONS=3
     ESP="/efi"

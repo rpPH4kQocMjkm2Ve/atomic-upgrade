@@ -4,8 +4,11 @@
 # Shared functions and configuration for the atomic-upgrade system.
 # Sourced by: atomic-upgrade, atomic-gc, atomic-rebuild-uki, atomic-guard
 
-# ── Defaults (overridable via /etc/atomic.conf) ─────────────────────
+# ── Library directory ──────────────────────────────────────────────
 
+LIBDIR="${LIBDIR:-/usr/lib/atomic}"
+
+# ── Defaults (overridable via /etc/atomic.conf) ─────────────────────
 BTRFS_MOUNT="/run/atomic/temp_root"
 NEW_ROOT="/run/atomic/newroot"
 ESP="/efi"
@@ -121,7 +124,7 @@ check_dependencies() {
     local root_type
     root_type=$(python3 -c "
 import json, importlib.util, sys
-spec = importlib.util.spec_from_file_location('rootdev', '/usr/lib/atomic/rootdev.py')
+spec = importlib.util.spec_from_file_location('rootdev', '${LIBDIR}/rootdev.py')
 mod = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mod)
 try:
@@ -139,12 +142,26 @@ except Exception:
         return 1
     fi
     # Verify python helper modules exist
-    for helper in /usr/lib/atomic/fstab.py /usr/lib/atomic/rootdev.py; do
+    for helper in "${LIBDIR}/fstab.py" "${LIBDIR}/rootdev.py"; do
         [[ -f "$helper" ]] || {
             echo "ERROR: Missing helper: $helper" >&2
             return 1
         }
     done
+}
+
+# ── Chroot unmount helper (module-level, called by chroot_snapshot) ──
+
+_chroot_umount() {
+    local root="$1"
+    umount "${root}${LOCK_DIR}" 2>/dev/null
+    umount "${root}/tmp" 2>/dev/null
+    umount "${root}/run" 2>/dev/null
+    umount "${root}/dev/shm" 2>/dev/null
+    umount "${root}/dev/pts" 2>/dev/null
+    umount "${root}/dev" 2>/dev/null
+    umount "${root}/sys/firmware/efi/efivars" 2>/dev/null
+    umount "${root}/sys" 2>/dev/null
 }
 
 # ── Snapshot chroot (replaces arch-chroot dependency) ────────────
@@ -154,31 +171,18 @@ chroot_snapshot() {
     local rc=0
     local resolv_link=""
 
-    # Unmount all chroot mounts in reverse order; safe to call at any
-    # point — silently skips paths that are not mounted.
-    _chroot_umount() {
-        umount "${root}${LOCK_DIR}" 2>/dev/null
-        umount "${root}/tmp" 2>/dev/null
-        umount "${root}/run" 2>/dev/null
-        umount "${root}/dev/shm" 2>/dev/null
-        umount "${root}/dev/pts" 2>/dev/null
-        umount "${root}/dev" 2>/dev/null
-        umount "${root}/sys/firmware/efi/efivars" 2>/dev/null
-        umount "${root}/sys" 2>/dev/null
-    }
-
     mount -t sysfs sys "${root}/sys" -o nosuid,noexec,nodev,ro || return 1
     if [[ -d "${root}/sys/firmware/efi/efivars" ]]; then
         mount -t efivarfs efivarfs "${root}/sys/firmware/efi/efivars" \
             -o nosuid,noexec,nodev 2>/dev/null || true
     fi
-    mount -t devtmpfs udev "${root}/dev" -o mode=0755,nosuid || { _chroot_umount; return 1; }
+    mount -t devtmpfs udev "${root}/dev" -o mode=0755,nosuid || { _chroot_umount "$root"; return 1; }
     mount -t devpts devpts "${root}/dev/pts" \
-        -o mode=0620,gid=5,nosuid,noexec || { _chroot_umount; return 1; }
-    mount -t tmpfs shm "${root}/dev/shm" -o mode=1777,nosuid,nodev || { _chroot_umount; return 1; }
-    mount -t tmpfs run "${root}/run" -o nosuid,nodev,mode=0755 || { _chroot_umount; return 1; }
+        -o mode=0620,gid=5,nosuid,noexec || { _chroot_umount "$root"; return 1; }
+    mount -t tmpfs shm "${root}/dev/shm" -o mode=1777,nosuid,nodev || { _chroot_umount "$root"; return 1; }
+    mount -t tmpfs run "${root}/run" -o nosuid,nodev,mode=0755 || { _chroot_umount "$root"; return 1; }
     mount -t tmpfs tmp "${root}/tmp" \
-        -o mode=1777,strictatime,nodev,nosuid || { _chroot_umount; return 1; }
+        -o mode=1777,strictatime,nodev,nosuid || { _chroot_umount "$root"; return 1; }
 
     # Expose host lock directory for atomic-guard verification
     if [[ -d "${LOCK_DIR}" ]]; then
@@ -211,7 +215,7 @@ chroot_snapshot() {
         rm -f "$resolv_target"
         ln -sf "$resolv_link" "$resolv_target"
     fi
-    _chroot_umount
+    _chroot_umount "$root"
     umount "${root}/proc" 2>/dev/null
 
     return $rc
@@ -268,7 +272,7 @@ verify_uki() {
 # ── fstab update (delegates to Python for safety) ──────────────────
 
 update_fstab() {
-    python3 /usr/lib/atomic/fstab.py "$@"
+    python3 "${LIBDIR}/fstab.py" "$@"
 }
 
 # ── fstab /home update ──────────────────────────────────────────
@@ -276,7 +280,7 @@ update_fstab() {
 # Args: $1 = fstab path, $2 = new home subvolume name
 
 update_fstab_home() {
-    python3 /usr/lib/atomic/fstab.py home "$@"
+    python3 "${LIBDIR}/fstab.py" home "$@"
 }
 
 # ── Home skeleton population ────────────────────────────────────
@@ -310,8 +314,8 @@ populate_home_skeleton() {
         if [[ -n "$copy_files" ]]; then
             local file_rel
             # Disable globbing to prevent pattern expansion in unquoted $copy_files
-            local _restore_glob
-            _restore_glob=$(shopt -po noglob 2>/dev/null) || _restore_glob="set +o noglob"
+            local _had_noglob=false
+            shopt -q noglob && _had_noglob=true
             set -f
             for file_rel in $copy_files; do
                 # Sanitize: no absolute paths, no path traversal
@@ -340,7 +344,11 @@ populate_home_skeleton() {
                     }
                 fi
             done
-            eval "$_restore_glob"
+            if $_had_noglob; then
+                shopt -s noglob
+            else
+                shopt -u noglob
+            fi
         fi
     done
 
@@ -378,7 +386,7 @@ get_root_device() {
     fi
 
     local dev
-    dev=$(python3 /usr/lib/atomic/rootdev.py device 2>/dev/null)
+    dev=$(python3 "${LIBDIR}/rootdev.py" device 2>/dev/null)
     if [[ -n "$dev" && -e "$dev" ]]; then
         _ROOT_DEVICE="$dev"
         echo "$dev"
@@ -403,7 +411,7 @@ ensure_btrfs_mounted() {
     if ! mountpoint -q "$BTRFS_MOUNT" 2>/dev/null; then
         local root_dev
         root_dev=$(get_root_device) || return 1
-        mount -o subvolid=5 "$root_dev" "$BTRFS_MOUNT" || {
+        mount -o subvolid=5,ro,nosuid,noexec,nodev "$root_dev" "$BTRFS_MOUNT" || {
             echo "ERROR: Failed to mount Btrfs root" >&2
             return 1
         }
@@ -497,8 +505,8 @@ list_generations() {
     local -a gens=()
     local f
     # Use nullglob so the glob yields nothing instead of a literal pattern
-    local _restore_nullglob
-    _restore_nullglob=$(shopt -p nullglob 2>/dev/null) || _restore_nullglob="shopt -u nullglob"
+    local _had_nullglob=false
+    shopt -q nullglob && _had_nullglob=true
     shopt -s nullglob
     for f in "${ESP}/EFI/Linux/arch-"*.efi; do
         local name="${f##*/}"
@@ -506,9 +514,20 @@ list_generations() {
         name="${name%.efi}"
         gens+=("$name")
     done
-    eval "$_restore_nullglob"
+    if $_had_nullglob; then
+        shopt -s nullglob
+    else
+        shopt -u nullglob
+    fi
     [[ ${#gens[@]} -eq 0 ]] && return 0
     printf '%s\n' "${gens[@]}" | sort -r
+}
+
+# ── UKI build cleanup helper (module-level, called by build_uki) ──
+
+_build_uki_cleanup() {
+    local os_release_tmp="$1"
+    [[ -n "$os_release_tmp" ]] && rm -f "$os_release_tmp"
 }
 
 # ── UKI build (uses rootdev.py for cmdline auto-detection) ──────────
@@ -516,13 +535,7 @@ list_generations() {
 build_uki() {
     local gen_id="$1" new_root="$2" new_subvol="$3"
     local uki_path="${ESP}/EFI/Linux/arch-${gen_id}.efi"
-
-    # Cleanup helper (not trap — would overwrite the caller's EXIT handler
-    # responsible for snapshot removal, unmounts, lock release)
     local os_release_tmp=""
-    _build_uki_cleanup() {
-        [[ -n "$os_release_tmp" ]] && rm -f "$os_release_tmp"
-    }
 
     local kernel="${new_root}/boot/vmlinuz-${KERNEL_PKG}"
     local initramfs="${new_root}/boot/initramfs-${KERNEL_PKG}.img"
@@ -548,7 +561,7 @@ build_uki() {
     fi
 
     local root_cmdline
-    root_cmdline=$(python3 /usr/lib/atomic/rootdev.py cmdline "$new_subvol") || {
+    root_cmdline=$(python3 "${LIBDIR}/rootdev.py" cmdline "$new_subvol") || {
         echo "ERROR: Cannot detect root device for cmdline" >&2
         return 1
     }
@@ -559,13 +572,13 @@ build_uki() {
 
     [[ -f "${new_root}/etc/os-release" ]] || {
         echo "ERROR: No os-release in snapshot" >&2
-        _build_uki_cleanup; return 1
+        _build_uki_cleanup "$os_release_tmp"; return 1
     }
 
     sed "s|^PRETTY_NAME=.*|PRETTY_NAME=\"Arch Linux (${gen_id})\"|" \
         "${new_root}/etc/os-release" > "$os_release_tmp" || {
         echo "ERROR: Failed to create temp os-release" >&2
-        _build_uki_cleanup; return 1
+        _build_uki_cleanup "$os_release_tmp"; return 1
     }
 
     local -a ukify_args=(
@@ -584,15 +597,15 @@ build_uki() {
 
     if ! "${ukify_args[@]}" >&2; then
         echo "ERROR: ukify build failed" >&2
-        _build_uki_cleanup; return 1
+        _build_uki_cleanup "$os_release_tmp"; return 1
     fi
 
     [[ -f "$uki_path" ]] || {
         echo "ERROR: UKI not created" >&2
-        _build_uki_cleanup; return 1
+        _build_uki_cleanup "$os_release_tmp"; return 1
     }
 
-    _build_uki_cleanup
+    _build_uki_cleanup "$os_release_tmp"
     echo "$uki_path"
 }
 
