@@ -8,8 +8,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/test_harness.sh"
 
 SCRIPT="${PROJECT_ROOT}/bin/atomic-upgrade"
 
-# Mock verify-lib to return the path of the library
-make_mock verify-lib 'echo "$1"; exit 0'
+# Mock verify-lib to return the project's common.sh (CI has no /usr/lib/atomic)
+make_mock verify-lib "echo '${PROJECT_ROOT}/lib/atomic/common.sh'; exit 0"
 
 # Create a testable copy of atomic-upgrade:
 # - Skips the EUID check (tests don't run as root)
