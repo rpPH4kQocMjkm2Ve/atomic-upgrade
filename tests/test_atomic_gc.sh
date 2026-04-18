@@ -183,6 +183,31 @@ assert_eq "gc with text count → rc 1" "1" "$_rc"
 _run_gc
 assert_eq "gc default count → rc 0" "0" "$_rc"
 
+# ── rm command: generation not found ─────────────────────
+
+section "rm command: generation not found"
+
+_run_gc rm --yes "20250101-000000"
+assert_eq "non-existent gen → rc 1" "1" "$_rc"
+assert_contains "not found message" "Generation not found" "$_out"
+
+# ── rm command: dry-run with multiple gens ───────────────
+
+section "rm command: dry-run with multiple gens"
+
+_run_gc rm -n "20250604-100000" "20250603-080000"
+assert_eq "dry-run multi → rc 0" "0" "$_rc"
+assert_contains "dry-run echoes delete" "DELETE_GEN" "$_out"
+assert_contains "dry-run echoes dry flag" "dry=1" "$_out"
+
+# ── rm command: delete tagged generation ─────────────────
+
+section "rm command: delete tagged generation"
+
+_run_gc rm --yes "20250615-120000-kde"
+assert_eq "delete tagged → rc 0" "0" "$_rc"
+assert_contains "tagged deleted" "DELETE_GEN 20250615-120000-kde" "$_out"
+
 # ── gc command: dry-run ──────────────────────────────────
 
 section "gc command: dry-run"
@@ -190,6 +215,89 @@ section "gc command: dry-run"
 _run_gc -n
 assert_eq "gc dry-run → rc 0" "0" "$_rc"
 assert_contains "gc dry-run flag" "dry=1" "$_out"
+
+# ── gc command: explicit keep count with dry-run ─────────
+
+section "gc command: explicit count with dry-run"
+
+_run_gc -n 5
+assert_eq "gc dry-run 5 → rc 0" "0" "$_rc"
+assert_contains "gc keep 5" "keep=5" "$_out"
+assert_contains "gc dry flag" "dry=1" "$_out"
+
+# ── list command: empty output ───────────────────────────
+
+section "list command: empty generations"
+
+# Patch a separate copy to return empty list
+cat > "${TESTDIR}/gc-mocks-empty.txt" << PATCH
+
+ESP="${_FAKE_ESP}"
+BTRFS_MOUNT="${_FAKE_BTRFS}"
+
+acquire_lock()        { echo "ACQUIRE_LOCK"; }
+ensure_btrfs_mounted(){ echo "ENSURE_BTRFS"; return 0; }
+get_current_subvol()  { echo ""; }
+list_generations() {
+    # empty
+    return 0
+}
+delete_generation() { return 0; }
+warn_orphan_homes() { return 0; }
+garbage_collect() { return 0; }
+
+PATCH
+
+_TEST_SCRIPT_EMPTY="${TESTDIR}/atomic-gc-empty-test"
+sed \
+    -e 's/\(\[\[ \$EUID -eq 0 \]\]\)/# \1/' \
+    -e '/^validate_config || exit 1$/s/^/# /' \
+    -e '/^_src "\${LIBDIR}\/common.sh"$/r '"${TESTDIR}/gc-mocks-empty.txt"'' \
+    "$SCRIPT" > "$_TEST_SCRIPT_EMPTY"
+
+chmod +x "$_TEST_SCRIPT_EMPTY"
+
+run_cmd bash "$_TEST_SCRIPT_EMPTY" list
+assert_eq "empty list → exit 0" "0" "$_rc"
+assert_contains "no generations message" "No generations found" "$_out"
+
+# ── list command: marks current correctly ────────────────
+
+section "list command: current marking"
+
+# Patch with known current
+cat > "${TESTDIR}/gc-mocks-current.txt" << PATCH
+
+ESP="${_FAKE_ESP}"
+BTRFS_MOUNT="${_FAKE_BTRFS}"
+
+acquire_lock()        { :; }
+ensure_btrfs_mounted(){ return 0; }
+get_current_subvol()  { echo "root-20250603-080000"; }
+list_generations() {
+    echo "20250605-120000"
+    echo "20250604-100000"
+    echo "20250603-080000"
+}
+delete_generation() { return 0; }
+warn_orphan_homes() { return 0; }
+garbage_collect() { return 0; }
+
+PATCH
+
+_TEST_SCRIPT_CUR="${TESTDIR}/atomic-gc-cur-test"
+sed \
+    -e 's/\(\[\[ \$EUID -eq 0 \]\]\)/# \1/' \
+    -e '/^validate_config || exit 1$/s/^/# /' \
+    -e '/^_src "\${LIBDIR}\/common.sh"$/r '"${TESTDIR}/gc-mocks-current.txt"'' \
+    "$SCRIPT" > "$_TEST_SCRIPT_CUR"
+
+chmod +x "$_TEST_SCRIPT_CUR"
+
+run_cmd bash "$_TEST_SCRIPT_CUR" list
+assert_eq "list with current → exit 0" "0" "$_rc"
+assert_contains "third is current" "* 20250603-080000  (current)" "$_out"
+assert_not_contains "first not current" "* 20250605-120000" "$_out"
 
 # ── Cleanup trap: verify in real script ───────────────────
 

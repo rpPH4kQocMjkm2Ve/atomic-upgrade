@@ -38,7 +38,9 @@ UNIT_TESTS = \
 	tests/test_uki.sh \
 	tests/test_home.sh \
 	tests/test_upgrade.sh \
+	tests/test_upgrade_flow.sh \
 	tests/test_rebuild_uki.sh \
+	tests/test_rebuild_uki_flow.sh \
 	tests/test_atomic_gc.sh
 
 test:
