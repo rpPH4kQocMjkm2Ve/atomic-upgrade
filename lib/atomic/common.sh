@@ -514,10 +514,13 @@ list_generations() {
     local _had_nullglob=false
     shopt -q nullglob && _had_nullglob=true
     shopt -s nullglob
-    for f in "${ESP}/EFI/Linux/arch-"*.efi; do
+    for f in "${ESP}/EFI/Linux/"*arch-*.efi; do
+        [[ -f "$f" ]] || continue
         local name="${f##*/}"
+        name="${name#0-active-}"
         name="${name#arch-}"
         name="${name%.efi}"
+        [[ "$name" == *.protected ]] && continue
         gens+=("$name")
     done
     if $_had_nullglob; then
@@ -793,6 +796,11 @@ delete_generation() {
         return 1
     fi
 
+    if [[ -f "${ESP}/EFI/Linux/arch-${gen_id}.efi.protected" ]]; then
+        echo "   REFUSE: ${gen_id} is protected (remove protection first)" >&2
+        return 1
+    fi
+
     if [[ "$dry_run" -eq 1 ]]; then
         echo "   Would delete: ${gen_id}"
         return 0
@@ -800,6 +808,8 @@ delete_generation() {
 
     echo "   Deleting: ${gen_id}"
     rm -f "${ESP}/EFI/Linux/arch-${gen_id}.efi"
+    rm -f "${ESP}/EFI/Linux/0-active-arch-${gen_id}.efi"
+    rm -f "${ESP}/EFI/Linux/arch-${gen_id}.efi.protected"
     if [[ -d "${BTRFS_MOUNT}/root-${gen_id}" ]]; then
         btrfs subvolume delete "${BTRFS_MOUNT}/root-${gen_id}" 2>/dev/null || {
             echo "   WARN: Failed to delete subvolume root-${gen_id}" >&2

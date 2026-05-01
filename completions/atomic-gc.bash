@@ -20,20 +20,21 @@ _atomic_gc() {
     fi
 
     if [[ $cword -eq 1 ]]; then
-        COMPREPLY=( $(compgen -W "list rm -h --help -V --version -n --dry-run" -- "$cur") )
+        COMPREPLY=( $(compgen -W "list rm activate deactivate protect unprotect -h --help -V --version -n --dry-run" -- "$cur") )
         return
     fi
 
     case "${words[1]}" in
-        rm)
+        rm|activate|deactivate|protect|unprotect)
             if [[ "$cur" == -* ]]; then
-                COMPREPLY=( $(compgen -W "-n --dry-run -y --yes" -- "$cur") )
+                [[ "${words[1]}" == "rm" ]] && COMPREPLY=( $(compgen -W "-n --dry-run -y --yes" -- "$cur") )
             else
                 local -a gens=()
                 local f name
-                for f in "$esp"/EFI/Linux/arch-*.efi; do
+                for f in "$esp"/EFI/Linux/"*arch-"*.efi; do
                     [[ -e "$f" ]] || continue
                     name="${f##*/}"
+                    name="${name#0-active-}"
                     name="${name#arch-}"
                     name="${name%.efi}"
                     gens+=("$name")

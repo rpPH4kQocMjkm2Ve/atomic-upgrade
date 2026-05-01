@@ -88,6 +88,10 @@ sudo atomic-gc --dry-run 2                             # preview: keep last 2
 atomic-gc list                                         # list all generations
 sudo atomic-gc rm 20260217-143022                      # delete specific generation
 sudo atomic-gc rm -y 20260217-143022 20260216-235122   # delete multiple without confirmation
+sudo atomic-gc activate 20260217-143022                # mark as active (UEFI boots first)
+sudo atomic-gc deactivate 20260217-143022              # remove active marker
+sudo atomic-gc protect 20260217-143022                 # protect from garbage collection
+sudo atomic-gc unprotect 20260217-143022               # remove protection
 sudo atomic-rebuild-uki --list                         # show subvolumes and UKI status
 sudo atomic-rebuild-uki 20250208-134725                # rebuild UKI for specific generation
 ```
@@ -97,8 +101,9 @@ sudo atomic-rebuild-uki 20250208-134725                # rebuild UKI for specifi
 Tab completion is available for `atomic-gc`, `atomic-rebuild-uki`, and `atomic-upgrade` in both zsh and bash:
 
 ```bash
-atomic-gc <TAB>              # → list  rm
+atomic-gc <TAB>              # → list  rm  activate  deactivate  protect  unprotect
 atomic-gc rm <TAB>           # → generation IDs from ESP
+atomic-gc activate <TAB>     # → generation IDs from ESP
 atomic-rebuild-uki <TAB>     # → generation IDs from ESP
 atomic-rebuild-uki -<TAB>    # → --help --list -h -l
 atomic-upgrade -<TAB>        # → --dry-run --tag --no-gc --separate-home ...

@@ -13,9 +13,13 @@ show_help() {
 atomic-gc v${VERSION} - Manage generations
 
 Usage:
-    atomic-gc [OPTIONS] [COUNT]    Garbage collect (keep COUNT, default: $KEEP_GENERATIONS)
-    atomic-gc list                 List all generations
+    atomic-gc [OPTIONS] [COUNT]          Garbage collect (keep COUNT, default: $KEEP_GENERATIONS)
+    atomic-gc list                       List all generations
     atomic-gc rm [OPTIONS] GEN_ID [GEN_ID ...]  Delete specific generation(s)
+    atomic-gc activate GEN_ID            Mark generation as active (UEFI boots first)
+    atomic-gc deactivate GEN_ID          Remove active mark from generation
+    atomic-gc protect GEN_ID             Protect generation from garbage collection
+    atomic-gc unprotect GEN_ID           Remove protection from generation
 
 Options:
     -n, --dry-run    Show what would be done
@@ -37,8 +41,12 @@ YES=0
 COMMAND="gc"
 
 case "${1:-}" in
-    list) COMMAND="list"; shift ;;
-    rm)   COMMAND="rm"; shift ;;
+    list)         COMMAND="list"; shift ;;
+    rm)           COMMAND="rm"; shift ;;
+    activate)     COMMAND="activate"; shift ;;
+    deactivate)   COMMAND="deactivate"; shift ;;
+    protect)      COMMAND="protect"; shift ;;
+    unprotect)    COMMAND="unprotect"; shift ;;
 esac
 
 ARGS=()
@@ -70,10 +78,17 @@ case "$COMMAND" in
         generations=$(list_generations)
         [[ -z "$generations" ]] && { echo "No generations found"; exit 0; }
         for gen_id in $generations; do
+            markers=""
+            if [[ -f "${ESP}/EFI/Linux/0-active-arch-${gen_id}.efi" ]]; then
+                markers+=" (active)"
+            fi
+            if [[ -f "${ESP}/EFI/Linux/arch-${gen_id}.efi.protected" ]]; then
+                markers+=" (protected)"
+            fi
             if [[ "root-${gen_id}" == "$current_subvol" ]]; then
-                echo "  * ${gen_id}  (current)"
+                echo "  * ${gen_id}${markers}  (current)"
             else
-                echo "    ${gen_id}"
+                echo "    ${gen_id}${markers}"
             fi
         done
         ;;
@@ -82,11 +97,16 @@ case "$COMMAND" in
         [[ ${#ARGS[@]} -eq 0 ]] && { echo "ERROR: Specify generation(s) to delete" >&2; exit 1; }
         ensure_btrfs_mounted || exit 1
         current_subvol=$(get_current_subvol)
-        # Validate all targets exist before deleting any
+        # Validate all targets exist and are not protected before deleting any
         for gen_id in "${ARGS[@]}"; do
             if [[ ! -f "${ESP}/EFI/Linux/arch-${gen_id}.efi" ]] && \
+               [[ ! -f "${ESP}/EFI/Linux/0-active-arch-${gen_id}.efi" ]] && \
                [[ ! -d "${BTRFS_MOUNT}/root-${gen_id}" ]]; then
                 echo "ERROR: Generation not found: ${gen_id}" >&2
+                exit 1
+            fi
+            if [[ -f "${ESP}/EFI/Linux/arch-${gen_id}.efi.protected" ]]; then
+                echo "ERROR: Refuse: ${gen_id} is protected (remove protection first)" >&2
                 exit 1
             fi
         done
@@ -110,5 +130,83 @@ case "$COMMAND" in
             exit 1
         fi
         garbage_collect "$KEEP_COUNT" "$DRY_RUN"
+        ;;
+    activate)
+        [[ ${#ARGS[@]} -eq 0 ]] && { echo "ERROR: Specify generation to activate" >&2; exit 1; }
+        gen_id="${ARGS[0]}"
+        # Validate gen_id format
+        if [[ ! "$gen_id" =~ ^[0-9]{8}-[0-9]{6}(-.+)?$ ]]; then
+            echo "ERROR: Invalid generation ID format: ${gen_id}" >&2
+            exit 1
+        fi
+        # Check if already active
+        if [[ -f "${ESP}/EFI/Linux/0-active-arch-${gen_id}.efi" ]]; then
+            echo "Generation ${gen_id} is already active"
+            exit 0
+        fi
+        # Check if UKI exists
+        if [[ ! -f "${ESP}/EFI/Linux/arch-${gen_id}.efi" ]]; then
+            echo "ERROR: Generation not found: ${gen_id}" >&2
+            exit 1
+        fi
+        # Rename to add active prefix
+        mv "${ESP}/EFI/Linux/arch-${gen_id}.efi" "${ESP}/EFI/Linux/0-active-arch-${gen_id}.efi"
+        echo "Activated: ${gen_id} (will boot first)"
+        ;;
+    deactivate)
+        [[ ${#ARGS[@]} -eq 0 ]] && { echo "ERROR: Specify generation to deactivate" >&2; exit 1; }
+        gen_id="${ARGS[0]}"
+        # Validate gen_id format
+        if [[ ! "$gen_id" =~ ^[0-9]{8}-[0-9]{6}(-.+)?$ ]]; then
+            echo "ERROR: Invalid generation ID format: ${gen_id}" >&2
+            exit 1
+        fi
+        # Check if active
+        if [[ ! -f "${ESP}/EFI/Linux/0-active-arch-${gen_id}.efi" ]]; then
+            echo "Generation ${gen_id} is not active"
+            exit 0
+        fi
+        # Rename to remove active prefix
+        mv "${ESP}/EFI/Linux/0-active-arch-${gen_id}.efi" "${ESP}/EFI/Linux/arch-${gen_id}.efi"
+        echo "Deactivated: ${gen_id}"
+        ;;
+    protect)
+        [[ ${#ARGS[@]} -eq 0 ]] && { echo "ERROR: Specify generation to protect" >&2; exit 1; }
+        gen_id="${ARGS[0]}"
+        # Validate gen_id format
+        if [[ ! "$gen_id" =~ ^[0-9]{8}-[0-9]{6}(-.+)?$ ]]; then
+            echo "ERROR: Invalid generation ID format: ${gen_id}" >&2
+            exit 1
+        fi
+        # Check if already protected
+        if [[ -f "${ESP}/EFI/Linux/arch-${gen_id}.efi.protected" ]]; then
+            echo "Generation ${gen_id} is already protected"
+            exit 0
+        fi
+        # Check if UKI exists (could be active or regular)
+        if [[ -f "${ESP}/EFI/Linux/arch-${gen_id}.efi" ]] || \
+           [[ -f "${ESP}/EFI/Linux/0-active-arch-${gen_id}.efi" ]]; then
+            touch "${ESP}/EFI/Linux/arch-${gen_id}.efi.protected"
+            echo "Protected: ${gen_id} (won't be garbage collected)"
+        else
+            echo "ERROR: Generation not found: ${gen_id}" >&2
+            exit 1
+        fi
+        ;;
+    unprotect)
+        [[ ${#ARGS[@]} -eq 0 ]] && { echo "ERROR: Specify generation to unprotect" >&2; exit 1; }
+        gen_id="${ARGS[0]}"
+        # Validate gen_id format
+        if [[ ! "$gen_id" =~ ^[0-9]{8}-[0-9]{6}(-.+)?$ ]]; then
+            echo "ERROR: Invalid generation ID format: ${gen_id}" >&2
+            exit 1
+        fi
+        # Check if protected
+        if [[ ! -f "${ESP}/EFI/Linux/arch-${gen_id}.efi.protected" ]]; then
+            echo "Generation ${gen_id} is not protected"
+            exit 0
+        fi
+        rm -f "${ESP}/EFI/Linux/arch-${gen_id}.efi.protected"
+        echo "Unprotected: ${gen_id}"
         ;;
 esac

@@ -17,6 +17,14 @@ atomic-gc — manage atomic-upgrade generations
 
 **atomic-gc** **rm** [**-n**|**\--dry-run**] [**-y**|**\--yes**] *GEN_ID* [*GEN_ID*...]
 
+**atomic-gc** **activate** *GEN_ID*
+
+**atomic-gc** **deactivate** *GEN_ID*
+
+**atomic-gc** **protect** *GEN_ID*
+
+**atomic-gc** **unprotect** *GEN_ID*
+
 # DESCRIPTION
 
 **atomic-gc** manages generations created by **atomic-upgrade**(8). A
@@ -50,8 +58,27 @@ warning.
 
 **rm** *GEN_ID* [*GEN_ID*...]
 :   Delete specific generation(s). Removes both the UKI file and the Btrfs
-    subvolume. Refuses to delete the currently booted generation. Prompts
-    for confirmation unless **-y** is given. Requires root.
+    subvolume. Refuses to delete the currently booted or protected
+    generation. Prompts for confirmation unless **-y** is given.
+    Requires root.
+
+**activate** *GEN_ID*
+:   Mark a generation as active by adding a `0-active-` prefix to its
+    UKI file. The UEFI firmware loads files alphabetically, so this
+    forces the generation to boot first. Requires root.
+
+**deactivate** *GEN_ID*
+:   Remove the active marker from a generation. Renames the UKI file
+    by removing the `0-active-` prefix. Requires root.
+
+**protect** *GEN_ID*
+:   Protect a generation from garbage collection by creating a sidecar
+    file (`arch-GEN_ID.efi.protected`). Protected generations are
+    skipped during garbage collection. Requires root.
+
+**unprotect** *GEN_ID*
+:   Remove protection from a generation by deleting its `.protected`
+    sidecar file. Requires root.
 
 # OPTIONS
 
@@ -97,6 +124,22 @@ Delete a specific generation:
 Delete multiple generations without confirmation:
 
     sudo atomic-gc rm -y 20260217-143022 20260216-235122
+
+Mark a generation as active (boots first):
+
+    sudo atomic-gc activate 20260217-143022
+
+Remove active marker:
+
+    sudo atomic-gc deactivate 20260217-143022
+
+Protect a generation from GC:
+
+    sudo atomic-gc protect 20260217-143022
+
+Remove protection:
+
+    sudo atomic-gc unprotect 20260217-143022
 
 # SEE ALSO
 

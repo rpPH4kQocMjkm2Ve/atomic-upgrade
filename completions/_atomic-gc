@@ -46,6 +46,10 @@ _atomic-gc() {
         '1:command:((
             list\:"List all generations"
             rm\:"Delete specific generation(s)"
+            activate\:"Mark generation as active"
+            deactivate\:"Remove active marker"
+            protect\:"Protect generation from GC"
+            unprotect\:"Remove protection from generation"
         ))' \
         '*::arg:->args' \
         && return
@@ -53,7 +57,7 @@ _atomic-gc() {
     case $state in
         args)
             case ${words[1]} in
-                rm)
+                rm|activate|deactivate|protect|unprotect)
                     _arguments \
                         '(-n --dry-run)'{-n,--dry-run}'[Show what would be done]' \
                         '(-y --yes)'{-y,--yes}'[Skip confirmation]' \

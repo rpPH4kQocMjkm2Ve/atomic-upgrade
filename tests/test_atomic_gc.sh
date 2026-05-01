@@ -299,7 +299,128 @@ assert_eq "list with current → exit 0" "0" "$_rc"
 assert_contains "third is current" "* 20250603-080000  (current)" "$_out"
 assert_not_contains "first not current" "* 20250605-120000" "$_out"
 
-# ── Cleanup trap: verify in real script ───────────────────
+# ── activate command ──────────────────────────────────────
+
+section "activate command"
+
+# Create a fake UKI to activate
+touch "${_FAKE_ESP}/EFI/Linux/arch-20250604-100000.efi"
+
+_run_gc activate 20250604-100000
+assert_eq "activate → rc 0" "0" "$_rc"
+assert_contains "activated message" "Activated" "$_out"
+assert_file_exists "active UKI created" "${_FAKE_ESP}/EFI/Linux/0-active-arch-20250604-100000.efi"
+assert_file_not_exists "original UKI removed" "${_FAKE_ESP}/EFI/Linux/arch-20250604-100000.efi"
+
+_run_gc activate 20250604-100000
+assert_eq "activate already active → rc 0" "0" "$_rc"
+assert_contains "already active message" "already active" "$_out"
+
+# Test with non-existent generation
+_run_gc activate 20990101-000000
+assert_eq "activate non-existent → rc 1" "1" "$_rc"
+
+# Test invalid GEN_ID format
+_run_gc activate "invalid"
+assert_eq "activate invalid format → rc 1" "1" "$_rc"
+
+# ── deactivate command ─────────────────────────────────────
+
+section "deactivate command"
+
+_run_gc deactivate 20250604-100000
+assert_eq "deactivate → rc 0" "0" "$_rc"
+assert_contains "deactivated message" "Deactivated" "$_out"
+assert_file_exists "UKI restored" "${_FAKE_ESP}/EFI/Linux/arch-20250604-100000.efi"
+assert_file_not_exists "active prefix removed" "${_FAKE_ESP}/EFI/Linux/0-active-arch-20250604-100000.efi"
+
+_run_gc deactivate 20250604-100000
+assert_eq "deactivate not active → rc 0" "0" "$_rc"
+assert_contains "not active message" "not active" "$_out"
+
+# ── protect command ────────────────────────────────────────
+
+section "protect command"
+
+_run_gc protect 20250604-100000
+assert_eq "protect → rc 0" "0" "$_rc"
+assert_contains "protected message" "Protected" "$_out"
+assert_file_exists "protected sidecar created" "${_FAKE_ESP}/EFI/Linux/arch-20250604-100000.efi.protected"
+
+_run_gc protect 20250604-100000
+assert_eq "protect already protected → rc 0" "0" "$_rc"
+assert_contains "already protected message" "already protected" "$_out"
+
+# Test with non-existent generation
+_run_gc protect 20990101-000000
+assert_eq "protect non-existent → rc 1" "1" "$_rc"
+
+# ── unprotect command ──────────────────────────────────────
+
+section "unprotect command"
+
+_run_gc unprotect 20250604-100000
+assert_eq "unprotect → rc 0" "0" "$_rc"
+assert_contains "unprotected message" "Unprotected" "$_out"
+assert_file_not_exists "protected sidecar removed" "${_FAKE_ESP}/EFI/Linux/arch-20250604-100000.efi.protected"
+
+_run_gc unprotect 20250604-100000
+assert_eq "unprotect not protected → rc 0" "0" "$_rc"
+assert_contains "not protected message" "not protected" "$_out"
+
+# ── list shows markers ────────────────────────────────────
+
+section "list shows markers"
+
+# Create test script with protected and active generations
+cat > "${TESTDIR}/gc-mocks-markers.txt" << PATCH
+
+ESP="${_FAKE_ESP}"
+BTRFS_MOUNT="${_FAKE_BTRFS}"
+
+acquire_lock()        { :; }
+ensure_btrfs_mounted(){ return 0; }
+get_current_subvol()  { echo "root-20250605-120000"; }
+list_generations() {
+    echo "20250605-120000"
+    echo "20250604-100000"
+    echo "20250603-080000"
+}
+delete_generation() { return 0; }
+warn_orphan_homes() { return 0; }
+garbage_collect() { return 0; }
+
+PATCH
+
+_TEST_SCRIPT_MARKERS="${TESTDIR}/atomic-gc-markers-test"
+sed \
+    -e 's/\(\[\[ \$EUID -eq 0 \]\]\)/# \1/' \
+    -e '/^validate_config || exit 1$/s/^/# /' \
+    -e '/^_src "${LIBDIR}\/common.sh"$/r '"${TESTDIR}/gc-mocks-markers.txt"'' \
+    "$SCRIPT" > "$_TEST_SCRIPT_MARKERS"
+chmod +x "$_TEST_SCRIPT_MARKERS"
+
+# Add markers
+touch "${_FAKE_ESP}/EFI/Linux/0-active-arch-20250604-100000.efi"
+touch "${_FAKE_ESP}/EFI/Linux/arch-20250603-080000.efi.protected"
+
+run_cmd bash "$_TEST_SCRIPT_MARKERS" list
+assert_eq "list with markers → exit 0" "0" "$_rc"
+assert_contains "shows active marker" "(active)" "$_out"
+assert_contains "shows protected marker" "(protected)" "$_out"
+
+# ── rm refuses protected generation ───────────────────────
+
+section "rm refuses protected generation"
+
+# Protect a generation
+touch "${_FAKE_ESP}/EFI/Linux/arch-20250604-100000.efi.protected"
+
+_run_gc rm --yes 20250604-100000
+assert_eq "rm protected → rc 1" "1" "$_rc"
+assert_contains "refuse protected" "protected" "$_out"
+
+# Cleanup trap: verify in real script ───────────────────
 
 section "Cleanup trap: verify in real script"
 

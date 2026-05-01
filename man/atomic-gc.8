@@ -12,6 +12,14 @@ atomic\-gc \[em] manage atomic\-upgrade generations
 \f[B]atomic\-gc\f[R] \f[B]rm\f[R] [\f[B]\-n\f[R]|\f[B]\-\-dry\-run\f[R]]
 [\f[B]\-y\f[R]|\f[B]\-\-yes\f[R]] \f[I]GEN_ID\f[R]
 [\f[I]GEN_ID\f[R]\&...]
+.PP
+\f[B]atomic\-gc\f[R] \f[B]activate\f[R] \f[I]GEN_ID\f[R]
+.PP
+\f[B]atomic\-gc\f[R] \f[B]deactivate\f[R] \f[I]GEN_ID\f[R]
+.PP
+\f[B]atomic\-gc\f[R] \f[B]protect\f[R] \f[I]GEN_ID\f[R]
+.PP
+\f[B]atomic\-gc\f[R] \f[B]unprotect\f[R] \f[I]GEN_ID\f[R]
 .SH DESCRIPTION
 \f[B]atomic\-gc\f[R] manages generations created by
 \f[B]atomic\-upgrade\f[R](8).
@@ -51,8 +59,31 @@ Does not require root.
 \f[B]rm\f[R] \f[I]GEN_ID\f[R] [\f[I]GEN_ID\f[R]\&...]
 Delete specific generation(s).
 Removes both the UKI file and the Btrfs subvolume.
-Refuses to delete the currently booted generation.
+Refuses to delete the currently booted or protected generation.
 Prompts for confirmation unless \f[B]\-y\f[R] is given.
+Requires root.
+.TP
+\f[B]activate\f[R] \f[I]GEN_ID\f[R]
+Mark a generation as active by adding a \f[CR]0\-active\-\f[R] prefix to
+its UKI file.
+The UEFI firmware loads files alphabetically, so this forces the
+generation to boot first.
+Requires root.
+.TP
+\f[B]deactivate\f[R] \f[I]GEN_ID\f[R]
+Remove the active marker from a generation.
+Renames the UKI file by removing the \f[CR]0\-active\-\f[R] prefix.
+Requires root.
+.TP
+\f[B]protect\f[R] \f[I]GEN_ID\f[R]
+Protect a generation from garbage collection by creating a sidecar file
+(\f[CR]arch\-GEN_ID.efi.protected\f[R]).
+Protected generations are skipped during garbage collection.
+Requires root.
+.TP
+\f[B]unprotect\f[R] \f[I]GEN_ID\f[R]
+Remove protection from a generation by deleting its
+\f[CR].protected\f[R] sidecar file.
 Requires root.
 .SH OPTIONS
 .TP
@@ -105,6 +136,30 @@ Delete multiple generations without confirmation:
 .IP
 .EX
 sudo atomic\-gc rm \-y 20260217\-143022 20260216\-235122
+.EE
+.PP
+Mark a generation as active (boots first):
+.IP
+.EX
+sudo atomic\-gc activate 20260217\-143022
+.EE
+.PP
+Remove active marker:
+.IP
+.EX
+sudo atomic\-gc deactivate 20260217\-143022
+.EE
+.PP
+Protect a generation from GC:
+.IP
+.EX
+sudo atomic\-gc protect 20260217\-143022
+.EE
+.PP
+Remove protection:
+.IP
+.EX
+sudo atomic\-gc unprotect 20260217\-143022
 .EE
 .SH SEE ALSO
 \f[B]atomic\-upgrade\f[R](8), \f[B]atomic.conf\f[R](5),
