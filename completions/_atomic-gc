@@ -25,8 +25,9 @@ _atomic_gc_gens() {
 
     esp="$(_atomic_gc_esp)"
 
-    for f in "$esp"/EFI/Linux/arch-*.efi(N); do
+    for f in "$esp"/EFI/Linux/(arch-|0-active-arch-)*.efi(N); do
         name="${f:t}"
+        name="${name#0-active-}"
         name="${name#arch-}"
         name="${name%.efi}"
         gens+=("$name")
