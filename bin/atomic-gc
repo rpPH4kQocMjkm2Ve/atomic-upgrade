@@ -80,10 +80,10 @@ case "$COMMAND" in
         for gen_id in $generations; do
             markers=""
             if [[ -f "${ESP}/EFI/Linux/0-active-arch-${gen_id}.efi" ]]; then
-                markers+=" (active)"
+                markers+="  (active)"
             fi
             if [[ -f "${ESP}/EFI/Linux/arch-${gen_id}.efi.protected" ]]; then
-                markers+=" (protected)"
+                markers+="  (protected)"
             fi
             if [[ "root-${gen_id}" == "$current_subvol" ]]; then
                 echo "  * ${gen_id}${markers}  (current)"

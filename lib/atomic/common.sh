@@ -649,6 +649,11 @@ garbage_collect() {
             continue
         fi
 
+        if [[ -f "${ESP}/EFI/Linux/arch-${gen_id}.efi.protected" ]]; then
+            to_keep+=("$gen_id (protected)")
+            continue
+        fi
+
         count=$((count + 1))
         if [[ $count -le $keep ]]; then
             to_keep+=("$gen_id")
@@ -683,7 +688,16 @@ garbage_collect() {
             local gen="${name#root-}"
             [[ "$name" == "$current_subvol" ]] && continue
             [[ "$gen" =~ ^[0-9]{8}-[0-9]{6} ]] || continue
-            if [[ ! -f "${ESP}/EFI/Linux/arch-${gen}.efi" ]]; then
+            local uki_exists=0
+            if [[ -f "${ESP}/EFI/Linux/arch-${gen}.efi" ]] || \
+               [[ -f "${ESP}/EFI/Linux/0-active-arch-${gen}.efi" ]]; then
+                uki_exists=1
+            fi
+            if [[ $uki_exists -eq 0 ]]; then
+                if [[ -f "${ESP}/EFI/Linux/arch-${gen}.efi.protected" ]]; then
+                    echo "   REFUSE: ${gen} is protected (remove protection first)"
+                    continue
+                fi
                 echo "   Orphan: ${name} (no UKI)"
                 if [[ "$dry_run" -eq 0 ]]; then
                     btrfs subvolume delete "$d" 2>/dev/null ||
@@ -692,9 +706,10 @@ garbage_collect() {
             fi
         done
 
-        for uki in "${ESP}/EFI/Linux/arch-"*.efi; do
+        for uki in "${ESP}/EFI/Linux/"{arch-,0-active-arch-}*.efi; do
             [[ -e "$uki" ]] || continue
             local uki_name="${uki##*/}"
+            uki_name="${uki_name#0-active-}"
             uki_name="${uki_name#arch-}"; uki_name="${uki_name%.efi}"
             [[ "root-${uki_name}" == "$current_subvol" ]] && continue
             [[ "$uki_name" =~ ^[0-9]{8}-[0-9]{6} ]] || continue
