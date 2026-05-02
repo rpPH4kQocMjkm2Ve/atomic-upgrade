@@ -196,6 +196,82 @@ assert_eq "default cmd count" "CHROOT_CMD_COUNT=2" "$(echo "$_out" | grep '^CHRO
 assert_eq "default cmd[0]" "CHROOT_CMD_0=/usr/bin/pacman" "$(echo "$_out" | grep '^CHROOT_CMD_0=')"
 assert_eq "default cmd[1]" "CHROOT_CMD_1=-Syu" "$(echo "$_out" | grep '^CHROOT_CMD_1=')"
 
+# ── Word splitting limitation: args with spaces ────────────
+
+section "Word splitting limitation (space in args)"
+
+CONFIG_FILE="${TESTDIR}/word_split.conf"
+cat > "$CONFIG_FILE" <<'EOF'
+COMMAND=/usr/bin/pacman -S nvidia driver
+EOF
+
+_TEST_SCRIPT_WS="${TESTDIR}/atomic-upgrade-word-split"
+sed \
+    -e 's|^\(export ATOMIC_UPGRADE=1\)$|\1\nCONFIG_FILE="${CONFIG_FILE:-/etc/atomic.conf}"|' \
+    -e 's/^\(\[\[ \$EUID -eq 0 \]\]\)/# \1/' \
+    -e '/^# Verify required variables are set$/i\
+if [[ "${ATOMIC_EXIT_AFTER_PARSE:-}" == "1" ]]; then\
+    echo "PARSE_OK"\
+    echo "CHROOT_CMD_COUNT=${#CHROOT_CMD[@]}"\
+    for i in "${!CHROOT_CMD[@]}"; do\
+        echo "CHROOT_CMD_${i}=${CHROOT_CMD[$i]}"\
+    done\
+    exit 0\
+fi\
+' \
+    "$SCRIPT" > "$_TEST_SCRIPT_WS"
+chmod +x "$_TEST_SCRIPT_WS"
+
+run_cmd env CONFIG_FILE="$CONFIG_FILE" ATOMIC_EXIT_AFTER_PARSE=1 bash "$_TEST_SCRIPT_WS"
+assert_eq "word split: PARSE_OK" "0" "$_rc"
+assert_eq "word split: count is 4" "CHROOT_CMD_COUNT=4" "$(echo "$_out" | grep '^CHROOT_CMD_COUNT=')"
+assert_eq "word split: arg[2]" "CHROOT_CMD_2=nvidia" "$(echo "$_out" | grep '^CHROOT_CMD_2=')"
+assert_eq "word split: arg[3]" "CHROOT_CMD_3=driver" "$(echo "$_out" | grep '^CHROOT_CMD_3=')"
+
+rm -f "$_TEST_SCRIPT_WS"
+
+# ── CLI -- COMMAND priority over config COMMAND= ────────────
+
+section "CLI -- COMMAND priority over config COMMAND="
+
+CONFIG_FILE="${TESTDIR}/cli_priority.conf"
+cat > "$CONFIG_FILE" <<'EOF'
+COMMAND=/usr/bin/pacman -Syu
+EOF
+
+_TEST_SCRIPT_CLI="${TESTDIR}/atomic-upgrade-cli-priority"
+sed \
+    -e 's|^\(export ATOMIC_UPGRADE=1\)$|\1\nCONFIG_FILE="${CONFIG_FILE:-/etc/atomic.conf}"|' \
+    -e 's/^\(\[\[ \$EUID -eq 0 \]\]\)/# \1/' \
+    -e '/^# Verify required variables are set$/i\
+if [[ "${ATOMIC_EXIT_AFTER_PARSE:-}" == "1" ]]; then\
+    echo "PARSE_OK"\
+    echo "DRY_RUN=${DRY_RUN}"\
+    echo "CUSTOM_TAG=${CUSTOM_TAG}"\
+    echo "NO_GC=${NO_GC}"\
+    echo "SEPARATE_HOME=${SEPARATE_HOME}"\
+    echo "COPY_FILES=${COPY_FILES}"\
+    echo "CHROOT_CMD_COUNT=${#CHROOT_CMD[@]}"\
+    for i in "${!CHROOT_CMD[@]}"; do\
+        echo "CHROOT_CMD_${i}=${CHROOT_CMD[$i]}"\
+    done\
+    echo "COMMAND_FROM_CONFIG=${COMMAND:-}"\
+    exit 0\
+fi\
+' \
+    "$SCRIPT" > "$_TEST_SCRIPT_CLI"
+chmod +x "$_TEST_SCRIPT_CLI"
+
+run_cmd env CONFIG_FILE="$CONFIG_FILE" ATOMIC_EXIT_AFTER_PARSE=1 bash "$_TEST_SCRIPT_CLI" -- /usr/bin/pacman -S nvidia
+assert_eq "CLI priority: PARSE_OK" "0" "$_rc"
+assert_contains "CLI priority: uses CLI args" "CHROOT_CMD_0=/usr/bin/pacman" "$_out"
+assert_contains "CLI priority: CLI arg[1]" "CHROOT_CMD_1=-S" "$_out"
+assert_contains "CLI priority: CLI arg[2]" "CHROOT_CMD_2=nvidia" "$_out"
+assert_eq "CLI priority: count is 3" "CHROOT_CMD_COUNT=3" "$(echo "$_out" | grep '^CHROOT_CMD_COUNT=')"
+assert_contains "CLI priority: COMMAND loaded from config" "COMMAND_FROM_CONFIG=/usr/bin/pacman -Syu" "$_out"
+
+rm -f "$_TEST_SCRIPT_CLI"
+
 # ── GEN_ID format validation ────────────────────────────────
 
 section "GEN_ID format validation"

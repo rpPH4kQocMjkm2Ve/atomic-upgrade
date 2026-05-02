@@ -276,7 +276,40 @@ assert_eq "HOME_COPY_FILES absent → stays empty" "" "$HOME_COPY_FILES"
 # Restore
 HOME_COPY_FILES=""
 
+# ── COMMAND config ───────────────────────────────────
 
+section "COMMAND config"
+
+# Test: COMMAND loaded from config
+CONFIG_FILE="${TESTDIR}/command.conf"
+cat > "$CONFIG_FILE" <<'EOF'
+COMMAND=/usr/bin/pacman -Syu
+EOF
+COMMAND=""
+load_config
+assert_eq "COMMAND loaded from config" "/usr/bin/pacman -Syu" "$COMMAND"
+COMMAND=""
+
+# Test: COMMAND with quotes
+CONFIG_FILE="${TESTDIR}/command_quoted.conf"
+cat > "$CONFIG_FILE" <<'EOF'
+COMMAND="/usr/bin/pacman -S nvidia"
+EOF
+COMMAND=""
+load_config
+assert_eq "COMMAND with double quotes" "/usr/bin/pacman -S nvidia" "$COMMAND"
+COMMAND=""
+
+# Test: COMMAND absent → stays empty
+CONFIG_FILE="${TESTDIR}/command_absent.conf"
+cat > "$CONFIG_FILE" <<'EOF'
+KEEP_GENERATIONS=3
+EOF
+COMMAND=""
+load_config
+assert_eq "COMMAND absent → stays empty" "" "$COMMAND"
+
+#
 # ── config key whitespace trimming ─────────────
 
 section "Config key whitespace trimming"

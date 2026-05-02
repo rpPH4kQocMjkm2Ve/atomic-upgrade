@@ -66,6 +66,12 @@ rejected entirely.
     page_alloc.shuffle=1 pti=on vsyscall=none randomize_kstack_offset=on
     debugfs=off**.
 
+**COMMAND**
+:   Default command to run in the snapshot chroot, overriding the built-in
+    default of **pacman -Syu**. Command-line **-- COMMAND...** takes priority
+    over this setting. Note: arguments with spaces inside are not supported
+    due to simple word splitting. Default: *(none)*.
+
 **SBCTL_SIGN**
 :   Enable UKI signing with **sbctl**(8) for Secure Boot. Set to **1** to
     enable, **0** to disable. When disabled, UKI files are built unsigned.

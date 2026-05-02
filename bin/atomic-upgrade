@@ -106,9 +106,11 @@ if [[ -n "$CUSTOM_TAG" ]]; then
     fi
 fi
 
-# Default chroot command
+# Default chroot command: use COMMAND from config (or default in common.sh).
+# Note: COMMAND uses simple word splitting; args with spaces inside
+# are not supported (same limitation as HOME_COPY_FILES).
 if [[ ${#CHROOT_CMD[@]} -eq 0 ]]; then
-    CHROOT_CMD=(/usr/bin/pacman -Syu)
+    read -ra CHROOT_CMD <<< "$COMMAND"
 fi
 
 # Verify required variables are set

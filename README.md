@@ -166,6 +166,7 @@ Edit `/etc/atomic.conf`:
 | `MAPPER_NAME` | `root_crypt` | dm-crypt mapper name (fallback if auto-detection fails) |
 | `KERNEL_PKG` | `linux` | Kernel package (linux/linux-lts/linux-zen) |
 | `KERNEL_PARAMS` | *(security defaults)* | Kernel command line parameters |
+| `COMMAND` | *(none)* | Default command in snapshot chroot (overrides built-in `pacman -Syu`) |
 | `SBCTL_SIGN` | `0` | Sign UKI files with sbctl for Secure Boot (`0`=off, `1`=on) |
 | `UPGRADE_GUARD` | `1` | Upgrade guard: block direct `pacman -Syu` (`0`=off, `1`=on) |
 | `HOME_COPY_FILES` | *(empty)* | Files to copy into isolated home subvolumes (see [Home isolation](#home-isolation)) |

@@ -71,6 +71,15 @@ device arguments.
 Default: \f[B]rw slab_nomerge init_on_alloc=1 page_alloc.shuffle=1
 pti=on vsyscall=none randomize_kstack_offset=on debugfs=off\f[R].
 .TP
+\f[B]COMMAND\f[R]
+Default command to run in the snapshot chroot, overriding the built\-in
+default of \f[B]pacman \-Syu\f[R].
+Command\-line \f[B]\-\-\f[R] \f[I]COMMAND...\f[R] takes priority over
+this setting.
+Note: arguments with spaces inside are not supported due to simple word
+splitting.
+Default: \f[I](none)\f[R].
+.TP
 \f[B]SBCTL_SIGN\f[R]
 Enable UKI signing with \f[B]sbctl\f[R](8) for Secure Boot.
 Set to \f[B]1\f[R] to enable, \f[B]0\f[R] to disable.

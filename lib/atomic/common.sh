@@ -29,6 +29,8 @@ UPGRADE_GUARD=1
 HOME_COPY_FILES=""
 # Kernel security parameters
 KERNEL_PARAMS="rw slab_nomerge init_on_alloc=1 page_alloc.shuffle=1 pti=on vsyscall=none randomize_kstack_offset=on debugfs=off"
+# Default chroot command (overridden by config or CLI -- COMMAND...)
+COMMAND="/usr/bin/pacman -Syu"
 
 # ── Config loading (safe parser, no arbitrary code execution) ───────
 
@@ -46,7 +48,7 @@ load_config() {
     fi
 
     # Whitelist of allowed config keys
-    local -a allowed=(BTRFS_MOUNT NEW_ROOT ESP KEEP_GENERATIONS MAPPER_NAME KERNEL_PARAMS KERNEL_PKG SBCTL_SIGN UPGRADE_GUARD HOME_COPY_FILES)
+    local -a allowed=(BTRFS_MOUNT NEW_ROOT ESP KEEP_GENERATIONS MAPPER_NAME KERNEL_PARAMS KERNEL_PKG COMMAND SBCTL_SIGN UPGRADE_GUARD HOME_COPY_FILES)
 
     while IFS='=' read -r key value; do
         # Strip leading/trailing whitespace from key
