@@ -156,6 +156,9 @@ If space cannot be determined, a warning is shown and the operation proceeds.
 */usr/lib/atomic/common.sh*
 :   Shared shell library.
 
+*/usr/lib/atomic/config.py*
+:   Config file parser with proper quote handling via `shlex`.
+
 */usr/lib/atomic/fstab.py*
 :   Safe fstab manipulation (atomic write, verification, rollback).
 

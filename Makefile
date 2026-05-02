@@ -29,7 +29,6 @@ clean:
 	rm -f $(MANPAGES)
 
 UNIT_TESTS = \
-	tests/test_config.sh \
 	tests/test_validate.sh \
 	tests/test_device.sh \
 	tests/test_space.sh \
@@ -54,6 +53,7 @@ test:
 	bash tests/test_integration.sh
 	python -m pytest tests/test_fstab.py -v
 	python -m pytest tests/test_rootdev.py -v
+	python -m pytest tests/test_config.py -v
 
 install:
 	install -Dm755 bin/atomic-upgrade     $(DESTDIR)$(BINDIR)/atomic-upgrade
@@ -62,6 +62,7 @@ install:
 	install -Dm755 bin/atomic-rebuild-uki $(DESTDIR)$(BINDIR)/atomic-rebuild-uki
 
 	install -Dm644 lib/atomic/common.sh  $(DESTDIR)$(LIBDIR)/common.sh
+	install -Dm755 lib/atomic/config.py   $(DESTDIR)$(LIBDIR)/config.py
 	install -Dm755 lib/atomic/fstab.py   $(DESTDIR)$(LIBDIR)/fstab.py
 	install -Dm755 lib/atomic/rootdev.py $(DESTDIR)$(LIBDIR)/rootdev.py
 
@@ -102,6 +103,7 @@ uninstall:
 	rm -f  $(DESTDIR)$(BINDIR)/atomic-gc
 	rm -f  $(DESTDIR)$(BINDIR)/atomic-guard
 	rm -f  $(DESTDIR)$(BINDIR)/atomic-rebuild-uki
+	rm -f  $(DESTDIR)$(LIBDIR)/config.py
 	rm -rf $(DESTDIR)$(LIBDIR)/
 	rm -f  $(DESTDIR)$(ZSH_COMPDIR)/_atomic-gc
 	rm -f  $(DESTDIR)$(ZSH_COMPDIR)/_atomic-rebuild-uki

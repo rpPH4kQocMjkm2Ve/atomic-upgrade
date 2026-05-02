@@ -32,62 +32,25 @@ KERNEL_PARAMS="rw slab_nomerge init_on_alloc=1 page_alloc.shuffle=1 pti=on vsysc
 # Default chroot command (overridden by config or CLI -- CHROOT_COMMAND...)
 CHROOT_COMMAND="/usr/bin/pacman -Syu"
 
-# ── Config loading (safe parser, no arbitrary code execution) ───────
+# ── Config loading (delegates to Python for proper quote handling) ───────
 
 CONFIG_FILE="${CONFIG_FILE:-/etc/atomic.conf}"
 
 load_config() {
     [[ -f "$CONFIG_FILE" ]] || return 0
 
-    # Refuse to load config not owned by root
-    local owner
-    owner=$(stat -c %u "$CONFIG_FILE" 2>/dev/null)
-    if [[ "$owner" != "0" ]]; then
-        echo "ERROR: $CONFIG_FILE not owned by root (owner uid: $owner)" >&2
+    local shell_output config_err
+    shell_output=$(python3 "${LIBDIR}/config.py" shell 2>&1) || {
+        config_err="$shell_output"
+        echo "ERROR: Failed to parse config with config.py" >&2
+        echo "ERROR: Details: $config_err" >&2
         return 1
-    fi
-
-    # Whitelist of allowed config keys
-    local -a allowed=(BTRFS_MOUNT NEW_ROOT ESP KEEP_GENERATIONS MAPPER_NAME KERNEL_PARAMS KERNEL_PKG CHROOT_COMMAND SBCTL_SIGN UPGRADE_GUARD HOME_COPY_FILES)
+    }
 
     while IFS='=' read -r key value; do
-        # Strip leading/trailing whitespace from key
-        key="${key#"${key%%[![:space:]]*}"}"
-        key="${key%"${key##*[![:space:]]}"}"
-        # Trim leading/trailing whitespace from value
-        value="${value#"${value%%[![:space:]]*}"}"
-        value="${value%"${value##*[![:space:]]}"}"
-
-        # Strip inline comments: everything after ' #' (space-hash).
-        # Limitation: values containing literal ' #' are truncated.
-        # Quoted values do not protect against this.  For kernel params
-        # and paths used in this config, this is not a practical concern.
-        value="${value%% #*}"
-        value="${value%"${value##*[![:space:]]}"}"
-
-        # Skip comments and blank lines
-        [[ "$key" =~ ^#.*$ || -z "$key" ]] && continue
-
-        # Check against whitelist
-        local valid=0
-        for a in "${allowed[@]}"; do
-            if [[ "$key" == "$a" ]]; then
-                valid=1
-                break
-            fi
-        done
-
-        if [[ $valid -eq 1 ]]; then
-            # Strip surrounding quotes (single or double)
-            value="${value#\"}"
-            value="${value%\"}"
-            value="${value#\'}"
-            value="${value%\'}"
-            printf -v "$key" '%s' "$value"
-        else
-            echo "WARN: Unknown config key ignored: $key" >&2
-        fi
-    done < "$CONFIG_FILE"
+        [[ -z "$key" || "$key" == \#* ]] && continue
+        printf -v "$key" '%s' "$value"
+    done <<< "$shell_output"
 }
 
 # ── Auto-initialization ──────────────────────────────────────────────

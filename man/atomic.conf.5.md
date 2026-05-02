@@ -29,9 +29,9 @@ single or double quotes, which are stripped during parsing.
 occurrence. Values containing a literal ` #` sequence will be truncated at
 that point. This does not affect typical paths or kernel parameters.
 
-Only whitelisted keys are accepted. Unknown keys produce a warning on stderr
-and are ignored. The file must be owned by root (uid 0); otherwise it is
-rejected entirely.
+Only allowed keys are accepted. Unknown keys produce a warning on stderr
+and are ignored. The file must be owned by root (uid 0) when at
+`/etc/atomic.conf`; otherwise it is rejected entirely.
 
 # OPTIONS
 
@@ -69,8 +69,8 @@ rejected entirely.
 **CHROOT_COMMAND**
 :   Default command to run in the snapshot chroot, overriding the built-in
     default of **pacman -Syu**. Command-line **-- CHROOT_COMMAND...** takes priority
-    over this setting. Note: arguments with spaces inside are not supported
-    due to simple word splitting. Default: *(none)*.
+    over this setting. Arguments with spaces are supported via proper
+    shell-style quote handling. Default: */usr/bin/pacman -Syu*.
 
 **SBCTL_SIGN**
 :   Enable UKI signing with **sbctl**(8) for Secure Boot. Set to **1** to
@@ -90,8 +90,8 @@ rejected entirely.
 
 # SECURITY
 
-The configuration file must be owned by root. If the file is owned by
-another user, it is rejected and no values are loaded.
+The configuration file must be owned by root when at `/etc/atomic.conf`.
+If the file is owned by another user, it is rejected and no values are loaded.
 
 Only the keys listed above are accepted. Attempts to set arbitrary shell
 variables (e.g., **PATH**, **LD_PRELOAD**) via the config file are silently

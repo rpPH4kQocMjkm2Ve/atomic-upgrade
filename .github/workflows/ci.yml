@@ -40,7 +40,6 @@ jobs:
               - 'lib/atomic/common.sh'
               - 'extras/pacman-wrapper'
               - 'tests/test_harness.sh'
-              - 'tests/test_config.sh'
               - 'tests/test_validate.sh'
               - 'tests/test_device.sh'
               - 'tests/test_space.sh'
@@ -52,8 +51,10 @@ jobs:
               - 'tests/test_rebuild_uki.sh'
               - '.github/workflows/ci.yml'
             python:
+              - 'lib/atomic/config.py'
               - 'lib/atomic/fstab.py'
               - 'lib/atomic/rootdev.py'
+              - 'tests/test_config.py'
               - 'tests/test_fstab.py'
               - 'tests/test_rootdev.py'
               - '.github/workflows/ci.yml'
@@ -88,8 +89,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - run: pip install --no-cache-dir ruff mypy
-      - run: ruff check lib/atomic/fstab.py lib/atomic/rootdev.py
-      - run: mypy --ignore-missing-imports lib/atomic/fstab.py lib/atomic/rootdev.py
+      - run: ruff check lib/atomic/config.py lib/atomic/fstab.py lib/atomic/rootdev.py
+      - run: mypy --ignore-missing-imports lib/atomic/config.py lib/atomic/fstab.py lib/atomic/rootdev.py
 
   python-test:
     needs: changes
@@ -108,7 +109,6 @@ jobs:
       - uses: actions/checkout@v6
       - run: |
           for t in \
-            tests/test_config.sh \
             tests/test_validate.sh \
             tests/test_device.sh \
             tests/test_space.sh \
