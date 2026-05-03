@@ -1,4 +1,4 @@
-.PHONY: install uninstall reinstall install-conf man clean test
+.PHONY: install uninstall reinstall install-conf man clean test test-root
 
 PREFIX     = /usr
 SYSCONFDIR = /etc
@@ -54,6 +54,20 @@ test:
 	python -m pytest tests/test_fstab.py -v
 	python -m pytest tests/test_rootdev.py -v
 	python -m pytest tests/test_config.py -v
+
+ROOT_TESTS = \
+	tests/test_config.py::TestParseConfig::test_config_not_owned_by_root
+
+test-root:
+	@if [ "$$(id -u)" -ne 0 ]; then \
+		echo "SKIP: test-root requires root (run: sudo make test-root)"; \
+	else \
+		for t in $(ROOT_TESTS); do \
+			echo ""; \
+			echo "━━━ $$t ━━━"; \
+			python -m pytest "$$t" -v || exit 1; \
+		done; \
+	fi
 
 install:
 	install -Dm755 bin/atomic-upgrade     $(DESTDIR)$(BINDIR)/atomic-upgrade
