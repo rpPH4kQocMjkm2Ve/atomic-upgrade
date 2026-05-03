@@ -110,14 +110,11 @@ fi
 if [[ ${#CHROOT_CMD[@]} -eq 0 ]]; then
     [[ -z "${CHROOT_COMMAND:-}" ]] && CHROOT_COMMAND="/usr/bin/pacman -Syu"
     CHROOT_CMD=()
-    config_err=$(CONFIG_FILE="${CONFIG_FILE}" python3 "${LIBDIR}/config.py" array CHROOT_COMMAND 2>&1)
-    if [[ $? -eq 0 ]]; then
-        while IFS= read -r -d '' token; do
-            CHROOT_CMD+=("$token")
-        done <<< "$config_err"
-    else
-        echo "WARN: Failed to parse CHROOT_COMMAND with config.py: $config_err" >&2
-    fi
+    # Read null-delimited output directly via process substitution to preserve null bytes
+    while IFS= read -r -d '' token; do
+        CHROOT_CMD+=("$token")
+    done < <(CONFIG_FILE="${CONFIG_FILE}" python3 "${LIBDIR}/config.py" array CHROOT_COMMAND 2>/dev/null)
+
     if [[ ${#CHROOT_CMD[@]} -eq 0 ]]; then
         read -ra CHROOT_CMD <<< "$CHROOT_COMMAND"
     fi
