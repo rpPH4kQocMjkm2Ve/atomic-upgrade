@@ -101,6 +101,15 @@ jobs:
       - run: pip install --no-cache-dir pytest
       - run: python -m pytest tests/ -v
 
+  python-test-root:
+    needs: changes
+    if: needs.changes.outputs.python == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: sudo pip install --no-cache-dir pytest
+      - run: sudo python -m pytest tests/test_config.py::TestParseConfig::test_config_not_owned_by_root -v
+
   bash-test:
     needs: changes
     if: needs.changes.outputs.shell == 'true'
