@@ -115,6 +115,8 @@ class TestParseConfig:
         # Ownership check only triggers for /etc/atomic.conf.
         # Use a real path in /etc via bind-mount over tmpfs so no real file is modified.
         real_path = Path("/etc/atomic.conf")
+        # Ensure mount point exists before bind-mount
+        real_path.touch(exist_ok=True)
         mount_point = tmp_path / "etc_atomic_conf"
         mount_point.write_text("ESP=/efi\n")
         # Bind-mount tmp file over /etc/atomic.conf
