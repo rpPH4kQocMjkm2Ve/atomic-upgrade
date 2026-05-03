@@ -114,10 +114,20 @@ fi
 MOCK
 chmod +x "${MOCK_BIN}/stat"
 
-for cmd in mountpoint mount btrfs df python3; do
+for cmd in mountpoint mount btrfs df; do
     printf '#!/bin/bash\nexit 0\n' > "${MOCK_BIN}/${cmd}"
     chmod +x "${MOCK_BIN}/${cmd}"
 done
+
+REAL_PYTHON3=$(command -v python3)
+cat > "${MOCK_BIN}/python3" <<MOCK
+#!/bin/bash
+for arg in "\$@"; do
+    [[ "\$arg" == *config.py* ]] && exec ${REAL_PYTHON3} "\$@"
+done
+exit 0
+MOCK
+chmod +x "${MOCK_BIN}/python3"
 
 cat > "${MOCK_BIN}/findmnt" <<'MOCK'
 #!/bin/bash
