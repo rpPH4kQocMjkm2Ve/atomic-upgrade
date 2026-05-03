@@ -7,7 +7,7 @@
 # Note: no "set -euo pipefail" here — the script relies on conditional
 # checks and process-tree walking that would break with errexit.
 
-LIBDIR="/usr/lib/atomic"
+readonly LIBDIR="/usr/lib/atomic"
 
 # Load common.sh with graceful degradation
 _COMMON_LOADED=0
