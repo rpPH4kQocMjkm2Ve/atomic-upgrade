@@ -36,8 +36,7 @@ load_config() {
     [[ -f "$CONFIG_FILE" ]] || return 0
 
     local shell_output config_err
-    shell_output=$(CONFIG_FILE="${CONFIG_FILE}" python3 "${_ATOMIC_LIB_DIR}/config.py" shell 2>/dev/null)
-    if [[ $? -ne 0 ]]; then
+    if ! shell_output=$(CONFIG_FILE="${CONFIG_FILE}" python3 "${_ATOMIC_LIB_DIR}/config.py" shell 2>/dev/null); then
         config_err=$(CONFIG_FILE="${CONFIG_FILE}" python3 "${_ATOMIC_LIB_DIR}/config.py" shell 2>&1) || true
         echo "ERROR: Failed to parse config with config.py" >&2
         echo "ERROR: Details: ${config_err:-unknown}" >&2
