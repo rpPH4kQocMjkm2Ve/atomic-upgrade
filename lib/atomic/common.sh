@@ -8,7 +8,7 @@ _ATOMIC_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # ── Project version ────────────────────────────────────────────────
 
-VERSION="0.2.1"
+VERSION="0.2.2"
 
 # ── Defaults (overridable via /etc/atomic.conf) ─────────────────────
 BTRFS_MOUNT="/run/atomic/temp_root"
