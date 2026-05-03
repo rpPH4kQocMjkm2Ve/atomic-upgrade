@@ -11,10 +11,17 @@ LIBDIR = Path(__file__).parent.parent / "lib" / "atomic"
 CONFIG_SCRIPT = LIBDIR / "config.py"
 
 
-def run_config(*args):
+@pytest.fixture
+def temp_config(tmp_path):
+    """Create a temporary config file and yield its path."""
+    config_path = tmp_path / "atomic.conf"
+    yield str(config_path)
+
+
+def run_config(*args, config_path=None):
     env = os.environ.copy()
-    if hasattr(run_config, 'config_path'):
-        env['CONFIG_FILE'] = run_config.config_path
+    if config_path is not None:
+        env['CONFIG_FILE'] = config_path
     result = subprocess.run(
         ["python3", str(CONFIG_SCRIPT)] + list(args),
         capture_output=True,
@@ -25,10 +32,9 @@ def run_config(*args):
     return result.returncode, result.stdout.strip(), result.stderr.strip()
 
 
-def create_temp_config(content, owner_uid=0):
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".conf", delete=False) as f:
+def create_temp_config(path, content, owner_uid=0):
+    with open(path, "w") as f:
         f.write(content)
-        path = f.name
     os.chmod(path, 0o644)
     if owner_uid != 0:
         try:
@@ -39,113 +45,88 @@ def create_temp_config(content, owner_uid=0):
 
 
 class TestParseConfig:
-    def test_defaults_without_file(self):
-        code, stdout, stderr = run_config("dump")
+    def test_defaults_without_file(self, temp_config):
+        code, stdout, stderr = run_config("dump", config_path=temp_config)
         assert code == 0
         data = json.loads(stdout)
         assert data["BTRFS_MOUNT"] == "/run/atomic/temp_root"
         assert data["KEEP_GENERATIONS"] == "3"
         assert data["CHROOT_COMMAND"] == "/usr/bin/pacman -Syu"
 
-    def test_simple_key_value(self):
-        config_path = create_temp_config("BTRFS_MOUNT=/custom/mount\n")
-        run_config.config_path = config_path
-        try:
-            code, stdout, stderr = run_config("dump")
-            assert code == 0
-            data = json.loads(stdout)
-            assert data["BTRFS_MOUNT"] == "/custom/mount"
-        finally:
-            os.unlink(config_path)
+    def test_simple_key_value(self, temp_config):
+        config_path = temp_config
+        create_temp_config(config_path, "BTRFS_MOUNT=/custom/mount\n")
+        code, stdout, stderr = run_config("dump", config_path=config_path)
+        assert code == 0
+        data = json.loads(stdout)
+        assert data["BTRFS_MOUNT"] == "/custom/mount"
 
-    def test_quoted_value_single(self):
-        config_path = create_temp_config("CHROOT_COMMAND='/usr/bin/pacman -Syu'\n")
-        run_config.config_path = config_path
-        try:
-            code, stdout, stderr = run_config("dump")
-            assert code == 0
-            data = json.loads(stdout)
-            assert data["CHROOT_COMMAND"] == "/usr/bin/pacman -Syu"
-        finally:
-            os.unlink(config_path)
+    def test_quoted_value_single(self, temp_config):
+        config_path = temp_config
+        create_temp_config(config_path, "CHROOT_COMMAND='/usr/bin/pacman -Syu'\n")
+        code, stdout, stderr = run_config("dump", config_path=config_path)
+        assert code == 0
+        data = json.loads(stdout)
+        assert data["CHROOT_COMMAND"] == "/usr/bin/pacman -Syu"
 
-    def test_quoted_value_double(self):
-        config_path = create_temp_config('CHROOT_COMMAND="/usr/bin/pacman -Syu"\n')
-        run_config.config_path = config_path
-        try:
-            code, stdout, stderr = run_config("dump")
-            assert code == 0
-            data = json.loads(stdout)
-            assert data["CHROOT_COMMAND"] == "/usr/bin/pacman -Syu"
-        finally:
-            os.unlink(config_path)
+    def test_quoted_value_double(self, temp_config):
+        config_path = temp_config
+        create_temp_config(config_path, 'CHROOT_COMMAND="/usr/bin/pacman -Syu"\n')
+        code, stdout, stderr = run_config("dump", config_path=config_path)
+        assert code == 0
+        data = json.loads(stdout)
+        assert data["CHROOT_COMMAND"] == "/usr/bin/pacman -Syu"
 
-    def test_inline_comment(self):
-        config_path = create_temp_config("ESP=/efi # this is a comment\n")
-        run_config.config_path = config_path
-        try:
-            code, stdout, stderr = run_config("dump")
-            assert code == 0
-            data = json.loads(stdout)
-            assert data["ESP"] == "/efi"
-        finally:
-            os.unlink(config_path)
+    def test_inline_comment(self, temp_config):
+        config_path = temp_config
+        create_temp_config(config_path, "ESP=/efi # this is a comment\n")
+        code, stdout, stderr = run_config("dump", config_path=config_path)
+        assert code == 0
+        data = json.loads(stdout)
+        assert data["ESP"] == "/efi"
 
-    def test_shlex_quote_handling(self):
-        config_path = create_temp_config('CHROOT_COMMAND=pacman -S "package with spaces"\n')
-        run_config.config_path = config_path
-        try:
-            code, stdout, stderr = run_config("dump")
-            assert code == 0
-            data = json.loads(stdout)
-            assert data["CHROOT_COMMAND"] == 'pacman -S "package with spaces"'
-        finally:
-            os.unlink(config_path)
+    def test_shlex_quote_handling(self, temp_config):
+        config_path = temp_config
+        create_temp_config(config_path, 'CHROOT_COMMAND=pacman -S "package with spaces"\n')
+        code, stdout, stderr = run_config("dump", config_path=config_path)
+        assert code == 0
+        data = json.loads(stdout)
+        assert data["CHROOT_COMMAND"] == 'pacman -S "package with spaces"'
 
-    def test_unknown_key_ignored(self):
-        config_path = create_temp_config("UNKNOWN_KEY=value\n")
-        run_config.config_path = config_path
-        try:
-            code, stdout, stderr = run_config("dump")
-            assert code == 0
-            assert "WARN" in stderr
-            data = json.loads(stdout)
-            assert "UNKNOWN_KEY" not in data
-        finally:
-            os.unlink(config_path)
+    def test_unknown_key_ignored(self, temp_config):
+        config_path = temp_config
+        create_temp_config(config_path, "UNKNOWN_KEY=value\n")
+        code, stdout, stderr = run_config("dump", config_path=config_path)
+        assert code == 0
+        assert "WARN" in stderr
+        data = json.loads(stdout)
+        assert "UNKNOWN_KEY" not in data
 
-    def test_comment_lines_skipped(self):
-        config_path = create_temp_config("# This is a comment\nESP=/boot/efi\n")
-        run_config.config_path = config_path
-        try:
-            code, stdout, stderr = run_config("dump")
-            assert code == 0
-            data = json.loads(stdout)
-            assert data["ESP"] == "/boot/efi"
-        finally:
-            os.unlink(config_path)
+    def test_comment_lines_skipped(self, temp_config):
+        config_path = temp_config
+        create_temp_config(config_path, "# This is a comment\nESP=/boot/efi\n")
+        code, stdout, stderr = run_config("dump", config_path=config_path)
+        assert code == 0
+        data = json.loads(stdout)
+        assert data["ESP"] == "/boot/efi"
 
     @pytest.mark.skipif(os.geteuid() != 0, reason="requires root")
-    def test_config_not_owned_by_root(self):
+    def test_config_not_owned_by_root(self, tmp_path):
         # Ownership check only triggers for /etc/atomic.conf.
-        # Back up existing file, write test config, restore after.
+        # Use a real path in /etc via bind-mount over tmpfs so no real file is modified.
         real_path = Path("/etc/atomic.conf")
-        backup = None
-        if real_path.exists():
-            backup = real_path.read_text()
+        mount_point = tmp_path / "etc_atomic_conf"
+        mount_point.write_text("ESP=/efi\n")
+        # Bind-mount tmp file over /etc/atomic.conf
+        import subprocess as sp
+        sp.run(["mount", "--bind", str(mount_point), str(real_path)], check=True)
         try:
-            real_path.write_text("ESP=/efi\n")
             os.chown(str(real_path), 1000, -1)
-            run_config.config_path = str(real_path)
-            code, stdout, stderr = run_config("dump")
+            code, stdout, stderr = run_config("dump", config_path=str(real_path))
             assert code == 1
             assert "not owned by root" in stderr
         finally:
-            if backup is not None:
-                real_path.write_text(backup)
-                os.chown(str(real_path), 0, 0)
-            elif real_path.exists():
-                real_path.unlink()
+            sp.run(["umount", str(real_path)], check=False)
 
 
 class TestKeyLookup:
@@ -166,14 +147,11 @@ class TestValidate:
         assert code == 0
         assert "Config valid" in stdout
 
-    def test_invalid_keep_generations(self):
-        config_path = create_temp_config("KEEP_GENERATIONS=abc\n")
-        run_config.config_path = config_path
-        try:
-            code, stdout, stderr = run_config("validate")
-            assert code == 1
-        finally:
-            os.unlink(config_path)
+    def test_invalid_keep_generations(self, temp_config):
+        config_path = temp_config
+        create_temp_config(config_path, "KEEP_GENERATIONS=abc\n")
+        code, stdout, stderr = run_config("validate", config_path=config_path)
+        assert code == 1
 
 
 class TestShellOutput:
@@ -184,38 +162,40 @@ class TestShellOutput:
         assert any(line.startswith("BTRFS_MOUNT=") for line in lines)
         assert any(line.startswith("KEEP_GENERATIONS=") for line in lines)
 
-    def test_shell_output_escapes_spaces(self):
-        config_path = create_temp_config('CHROOT_COMMAND=pacman -S "package with spaces"\n')
-        run_config.config_path = config_path
-        try:
-            code, stdout, stderr = run_config("shell")
-            assert code == 0
-            lines = stdout.split("\n")
-            cmd_line = [line for line in lines if line.startswith("CHROOT_COMMAND=")][0]
-            assert "package with spaces" in cmd_line
-        finally:
-            os.unlink(config_path)
+    def test_shell_output_escapes_spaces(self, temp_config):
+        config_path = temp_config
+        create_temp_config(config_path, 'CHROOT_COMMAND=pacman -S "package with spaces"\n')
+        code, stdout, stderr = run_config("shell", config_path=config_path)
+        assert code == 0
+        lines = stdout.split("\n")
+        cmd_line = [line for line in lines if line.startswith("CHROOT_COMMAND=")][0]
+        assert "pacman" in cmd_line
 
 
 class TestArrayOutput:
-    def test_array_simple(self):
-        config_path = create_temp_config("CHROOT_COMMAND=/usr/bin/pacman -Syu\n")
-        run_config.config_path = config_path
-        try:
-            code, stdout, stderr = run_config("array", "CHROOT_COMMAND")
-            assert code == 0
-            tokens = stdout.split("\0")
-            assert "pacman" in tokens[0]
-        finally:
-            os.unlink(config_path)
+    def test_array_simple(self, temp_config):
+        config_path = temp_config
+        create_temp_config(config_path, "CHROOT_COMMAND=/usr/bin/pacman -Syu\n")
+        code, stdout, stderr = run_config("array", "CHROOT_COMMAND", config_path=config_path)
+        assert code == 0
+        tokens = stdout.split("\0")
+        assert "pacman" in tokens[0]
 
-    def test_array_with_quoted_spaces(self):
-        config_path = create_temp_config('CHROOT_COMMAND=pacman -S "package with spaces"\n')
-        run_config.config_path = config_path
-        try:
-            code, stdout, stderr = run_config("array", "CHROOT_COMMAND")
-            assert code == 0
-            tokens = [t for t in stdout.split("\0") if t]
-            assert "package with spaces" in tokens
-        finally:
-            os.unlink(config_path)
+    def test_array_with_quoted_spaces(self, temp_config):
+        config_path = temp_config
+        create_temp_config(config_path, 'CHROOT_COMMAND=pacman -S "package with spaces"\n')
+        code, stdout, stderr = run_config("array", "CHROOT_COMMAND", config_path=config_path)
+        assert code == 0
+        tokens = [t for t in stdout.split("\0") if t]
+        assert "package with spaces" in tokens
+
+
+class TestDefaultConfig:
+    def test_owner_check_skipped_for_non_system_paths(self, temp_config):
+        """Ownership check should be skipped for paths other than /etc/atomic.conf."""
+        config_path = temp_config
+        create_temp_config(config_path, "ESP=/test\n", owner_uid=1000)
+        code, stdout, stderr = run_config("dump", config_path=config_path)
+        assert code == 0
+        data = json.loads(stdout)
+        assert data["ESP"] == "/test"

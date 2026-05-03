@@ -124,21 +124,13 @@ def main():
 
     if command == "validate":
         config = parse_config()
-        try:
-            int(config["KEEP_GENERATIONS"])
-        except ValueError:
-            print("ERROR: KEEP_GENERATIONS must be a number", file=sys.stderr)
-            return 1
-        try:
-            int(config["SBCTL_SIGN"])
-        except ValueError:
-            print("ERROR: SBCTL_SIGN must be a number", file=sys.stderr)
-            return 1
-        try:
-            int(config["UPGRADE_GUARD"])
-        except ValueError:
-            print("ERROR: UPGRADE_GUARD must be a number", file=sys.stderr)
-            return 1
+        numeric_keys = ["KEEP_GENERATIONS", "SBCTL_SIGN", "UPGRADE_GUARD"]
+        for key in numeric_keys:
+            try:
+                int(config[key])
+            except ValueError:
+                print(f"ERROR: {key} must be a number", file=sys.stderr)
+                return 1
         print("Config valid")
         return 0
 
